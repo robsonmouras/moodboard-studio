@@ -1,11 +1,13 @@
 # Moodboard Studio
 
 Gerador de moodboard: busca de imagens (Unsplash), favoritar, montar board, login e link
-público de compartilhamento. Case Design Engineer — EuGencia.
+público de compartilhamento.
 
-> **Status:** Fase 0 — scaffold da stack. Ainda **não há nenhuma tela do produto**
-> (busca, grid, board, favoritos, login). Isso entra na Fase 1 (protótipo de interface com
-> dados mockados). Ver `../decisões/fase-1-checklist.md`.
+> **Status:** Fase 1 — protótipo de interface. A home (`/`) é a tela de busca: campo de
+> busca → grid de resultados mockados → favoritar → board (tudo em estado local, sem
+> backend). A tela de login existe em código (`/login`) mas fica fora do fluxo — ver
+> `../decisões/decisao-01-home-busca-sem-login.md`. Consumo real da Unsplash = Fase 2;
+> auth + persistência = Fase 3. Ver `../decisões/fase-1-checklist.md`.
 
 ---
 
@@ -61,7 +63,7 @@ e é usada como `colorPalette="brand"` nos componentes do Park UI.
 
 Tudo que é identificador de código em **inglês** (pastas, arquivos, componentes, variáveis,
 funções, tipos, props, chaves de tema). Comentários podem ficar em português quando registram
-uma decisão para o case.
+uma decisão de projeto.
 
 | Item | Convenção | Exemplo |
 |---|---|---|
@@ -77,11 +79,11 @@ uma decisão para o case.
 
 ```
 src/
-  app/            rotas (App Router) — layout raiz + home (só prova de setup)
+  app/            rotas (App Router) — layout raiz + / (tela de busca) + /login (fora do fluxo)
   components/     componentes React (PascalCase); components/ui/ = Park UI
-  lib/            clients e utilitários (ex: supabase.ts)
+  lib/            clients, dados e utilitários (supabase.ts, mock-images.ts)
   theme/          tema do Park UI/Panda: tokens, recipes, cores
-  types/          tipos TypeScript compartilhados (começa vazio)
+  types/          tipos de domínio (SearchImage, BoardItem, Board)
 styled-system/    GERADO pelo Panda — não versionado
 ```
 
@@ -112,5 +114,7 @@ Ver `.env.local.example`. `.env.local` não vai para o git.
 
 ## Fora de escopo nesta fase
 
-Nenhuma tela de busca/grid/board/favoritos; nenhum dado mockado; nenhuma lógica de fetch
-(Unsplash) ou de autenticação (Supabase); nenhuma tabela no Supabase.
+Nenhuma chamada real à Unsplash (o grid vem de `src/lib/mock-images.ts`); nenhuma
+autenticação real (o `/login` só valida campo vazio); nenhuma persistência — "Salvar"
+é só feedback visual, nada vai para o Supabase e não há tabela. Consumo real da API =
+Fase 2; auth + persistência = Fase 3.

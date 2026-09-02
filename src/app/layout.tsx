@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter, Outfit } from "next/font/google";
+import { Inter, Instrument_Serif, Outfit } from "next/font/google";
 import "./globals.css";
 
 // Tipografia da identidade visual (brand-book Vortex):
@@ -20,6 +20,15 @@ const inter = Inter({
   display: "swap",
 });
 
+// Instrument Serif: usada apenas no headline da tela de entrada (/login), conforme
+// decisão de design v3. Só tem peso 400. Conectada ao token de fonte fonts.serif.
+const instrumentSerif = Instrument_Serif({
+  variable: "--font-instrument-serif",
+  subsets: ["latin"],
+  weight: ["400"],
+  display: "swap",
+});
+
 export const metadata: Metadata = {
   title: "Moodboard Studio",
   description: "Gerador de moodboard — busca de imagens, favoritos e board compartilhável.",
@@ -27,7 +36,10 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="pt-BR" className={`${outfit.variable} ${inter.variable}`}>
+    <html
+      lang="pt-BR"
+      className={`${outfit.variable} ${inter.variable} ${instrumentSerif.variable}`}
+    >
       <body>{children}</body>
     </html>
   );

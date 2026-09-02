@@ -59,6 +59,9 @@ export default defineConfig({
         fonts: {
           display: { value: "var(--font-outfit), sans-serif" },
           body: { value: "var(--font-inter), sans-serif" },
+          // Serifada usada só no headline da tela de entrada (/login). Ver
+          // decisão de design v3 da tela de Login — em aberto se estende a outros títulos.
+          serif: { value: "var(--font-instrument-serif), Georgia, 'Times New Roman', serif" },
         },
       },
 

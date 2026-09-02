@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "clean-ports": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/clean-ports.ps1",
     "prepare": "panda codegen"
   },
   "dependencies": {

@@ -1,8 +1,40 @@
 /**
- * Tipos TypeScript compartilhados do produto.
- *
- * Vazio de propósito nesta fase (scaffold). Os tipos de domínio — imagem da Unsplash,
- * item de board, favorito etc. — entram na Fase 1 junto com os dados mockados,
- * já tipados (nada de `any` solto), para evitar refatoração na Fase 2.
+ * Tipos de domínio do produto — já tipados na Fase 1 (protótipo com dados mockados)
+ * para evitar refatoração na Fase 2, quando os dados reais da Unsplash entram no lugar
+ * dos mocks. Nada de `any` solto.
  */
-export {};
+
+/**
+ * Uma imagem de resultado de busca.
+ *
+ * Na Fase 1 os campos são preenchidos por `src/lib/mock-images.ts`. Na Fase 2 a mesma
+ * forma passa a ser montada a partir da resposta real da Unsplash (`urls.regular`,
+ * `user.name`, `alt_description` etc.) — por isso os nomes já seguem esse vocabulário.
+ */
+export interface SearchImage {
+  /** Identificador estável do resultado (na Fase 2, o `id` da Unsplash). */
+  id: string;
+  /** Texto curto que descreve a imagem — usado em `alt` e na busca. */
+  description: string;
+  /** Crédito do autor (exigência da licença da Unsplash a partir da Fase 2). */
+  author: string;
+  /** Proporção do placeholder, no formato aceito por `aspect-ratio` (ex.: "3 / 4"). */
+  aspectRatio: string;
+  /**
+   * Par de cores do placeholder mockado (gradiente). Representa o conteúdo da foto,
+   * não o chrome da interface — por isso não sai de token de tema.
+   * Some na Fase 2, quando entra a URL real da imagem.
+   */
+  placeholder: { from: string; to: string };
+  /** Palavras-chave para o filtro de busca mockado. Some na Fase 2. */
+  tags: string[];
+}
+
+/** Um item já favoritado e presente no board. */
+export type BoardItem = SearchImage;
+
+/** O board em construção — favoritos + o nome que a Marina dá a ele. */
+export interface Board {
+  name: string;
+  items: BoardItem[];
+}
