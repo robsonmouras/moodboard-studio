@@ -94,7 +94,8 @@ npm run dev                        # http://localhost:3000
 ```
 
 Outros scripts: `npm run build`, `npm run lint`, `npm run start`.
-`npm run prepare` roda `panda codegen` (também roda no `postinstall`).
+O script `prepare` roda `panda codegen` automaticamente depois de `npm install`
+(gera a pasta `styled-system/`). Para rodar na mão: `npx panda codegen`.
 
 > Ao instalar, o npm pode avisar sobre `install scripts not covered` (esbuild, unrs-resolver).
 > São otimizações opcionais de binário nativo; o projeto builda e linta normalmente sem elas.
