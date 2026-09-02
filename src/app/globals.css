@@ -1,0 +1,4 @@
+/* Entry CSS do Panda. As camadas abaixo são preenchidas pelo plugin PostCSS do Panda
+   (reset + tokens + recipes + utilities). Toda a estilização do produto passa por
+   tokens do tema (ver panda.config.ts) — nada de cor/fonte hardcoded em componente. */
+@layer reset, base, tokens, recipes, utilities;
