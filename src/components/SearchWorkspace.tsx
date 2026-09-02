@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { css } from "styled-system/css";
 import { BoardPanel } from "@/components/BoardPanel";
 import { HeroIllustration } from "@/components/HeroIllustration";
+import { Navbar } from "@/components/Navbar";
 import { ResultsGrid } from "@/components/ResultsGrid";
 import { SearchField } from "@/components/SearchField";
 import { searchMockImages } from "@/lib/mock-images";
@@ -73,28 +74,7 @@ export function SearchWorkspace() {
         overflowX: "hidden",
       })}
     >
-      <header
-        className={css({
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: "4",
-          px: { base: "5", md: "8" },
-          py: "5",
-        })}
-      >
-        <span
-          className={css({
-            fontFamily: "body",
-            fontWeight: "semibold",
-            fontSize: "sm",
-            letterSpacing: "0.01em",
-            color: "textPrimary",
-          })}
-        >
-          Moodboard Studio
-        </span>
-      </header>
+      <Navbar />
 
       <main
         className={css({

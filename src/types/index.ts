@@ -33,8 +33,20 @@ export interface SearchImage {
 /** Um item já favoritado e presente no board. */
 export type BoardItem = SearchImage;
 
-/** O board em construção — favoritos + o nome que a Marina dá a ele. */
+/**
+ * Um board salvo — favoritos agrupados sob um nome.
+ *
+ * Fase 1: os boards vêm de `src/lib/mock-boards.ts` e as edições (renomear, excluir,
+ * remover imagem) vivem só em memória no `BoardsProvider`. Na Fase 3 isto vira uma
+ * tabela no Supabase (`id` = PK, `savedAt` = coluna, `items` = relação).
+ */
 export interface Board {
+  /** Identificador estável — usado na rota `/favoritos/[id]`. */
+  id: string;
+  /** Nome que o usuário deu ao board. */
   name: string;
+  /** Quando o board foi salvo (ISO 8601). */
+  savedAt: string;
+  /** As inspirações guardadas no board. */
   items: BoardItem[];
 }
