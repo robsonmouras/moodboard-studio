@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { X } from "@phosphor-icons/react";
+import { Warning, X } from "@phosphor-icons/react";
 import { css } from "styled-system/css";
 import { BoardPanel } from "@/components/BoardPanel";
 import { BrandHeadline } from "@/components/BrandHeadline";
 import { iconDefaults } from "@/components/Icon";
+import { ImageTile } from "@/components/ImageTile";
 import { Navbar } from "@/components/Navbar";
 import { RecentBoards } from "@/components/RecentBoards";
 import { ResultsGrid, type SearchStatus } from "@/components/ResultsGrid";
@@ -36,6 +37,8 @@ function toBoardItem(image: SearchImage): BoardItem {
     description: image.description,
     author: image.author,
     aspectRatio: image.aspectRatio,
+    width: image.width,
+    height: image.height,
     imageUrl: image.imageUrl,
     thumbUrl: image.thumbUrl,
   };
@@ -115,6 +118,216 @@ function deriveSearchState(
   return { status: results.length === 0 ? "empty" : "success", results };
 }
 
+/** Imagem mostrada como prova nos avisos de duplicata (miniatura + descrição). */
+type DupeThumb = { key: string; description: string; thumbUrl?: string };
+
+/**
+ * Aviso em destaque (modal) de que uma ou mais imagens já estão no board de
+ * destino — o produto não deixa a mesma foto entrar duas vezes. Grande, com
+ * ícone e as miniaturas exatas das imagens ignoradas, pra não passar batido.
+ *
+ * `onDismiss` (backdrop / Esc / botão neutro) e `onConfirm` (botão primário)
+ * podem ser a mesma ação (caso de uma imagem só, com um "OK") ou diferentes
+ * (relatório de lote: "Continuar aqui" vs "Ver board").
+ */
+function DuplicateDialog({
+  title,
+  description,
+  thumbs,
+  confirmLabel,
+  onConfirm,
+  dismissLabel,
+  onDismiss,
+}: {
+  title: string;
+  description: string;
+  thumbs: DupeThumb[];
+  confirmLabel: string;
+  onConfirm: () => void;
+  dismissLabel?: string;
+  onDismiss: () => void;
+}) {
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") onDismiss();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onDismiss]);
+
+  return (
+    <div
+      role="alertdialog"
+      aria-modal="true"
+      aria-label={title}
+      onClick={onDismiss}
+      className={css({
+        position: "fixed",
+        inset: "0",
+        zIndex: "modal",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        p: "5",
+        bg: "black.a8",
+        animationName: "fade-in",
+        animationDuration: "fast",
+      })}
+    >
+      <div
+        onClick={(event) => event.stopPropagation()}
+        className={css({
+          w: "full",
+          maxW: "440px",
+          display: "flex",
+          flexDir: "column",
+          gap: "5",
+          bg: "surface",
+          borderWidth: "1px",
+          borderStyle: "solid",
+          borderColor: "border",
+          rounded: "2xl",
+          boxShadow: "xl",
+          p: "6",
+          transformOrigin: "center",
+          animationStyle: "scale-fade-in",
+          animationDuration: "fast",
+        })}
+      >
+        <div className={css({ display: "flex", gap: "3.5", alignItems: "flex-start" })}>
+          <span
+            className={css({
+              flexShrink: "0",
+              display: "grid",
+              placeItems: "center",
+              w: "44px",
+              h: "44px",
+              rounded: "full",
+              bg: "brand.3",
+              color: "brand.11",
+            })}
+          >
+            <Warning size={24} weight="fill" aria-hidden />
+          </span>
+          <div className={css({ display: "flex", flexDir: "column", gap: "1", pt: "0.5" })}>
+            <p
+              className={css({
+                fontFamily: "display",
+                fontWeight: "400",
+                fontSize: "xl",
+                lineHeight: "1.25",
+                color: "textPrimary",
+              })}
+            >
+              {title}
+            </p>
+            <p className={css({ fontFamily: "body", fontSize: "sm", color: "gray.11" })}>
+              {description}
+            </p>
+          </div>
+        </div>
+
+        {thumbs.length > 0 && (
+          <ul
+            className={css({
+              listStyle: "none",
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fill, minmax(64px, 1fr))",
+              gap: "2",
+              maxH: "192px",
+              overflowY: "auto",
+            })}
+          >
+            {thumbs.map((thumb) => (
+              <li key={thumb.key} className={css({ position: "relative" })}>
+                <ImageTile
+                  image={{ description: thumb.description, thumbUrl: thumb.thumbUrl, aspectRatio: "1" }}
+                  rounded="lg"
+                  sizes="72px"
+                />
+                <span
+                  aria-hidden
+                  className={css({
+                    position: "absolute",
+                    inset: "0",
+                    rounded: "lg",
+                    bg: "black.a5",
+                    borderWidth: "2px",
+                    borderStyle: "solid",
+                    borderColor: "brand.9",
+                  })}
+                />
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <div
+          className={css({
+            display: "flex",
+            flexWrap: "wrap",
+            justifyContent: "flex-end",
+            gap: "2",
+          })}
+        >
+          {dismissLabel && (
+            <button
+              type="button"
+              onClick={onDismiss}
+              className={css({
+                h: "44px",
+                px: "5",
+                rounded: "full",
+                borderWidth: "1px",
+                borderStyle: "solid",
+                borderColor: "gray.6",
+                cursor: "pointer",
+                bg: "surface",
+                color: "textPrimary",
+                fontFamily: "body",
+                fontSize: "sm",
+                _hover: { bg: "gray.2" },
+                _focusVisible: {
+                  outline: "2px solid",
+                  outlineColor: "ctaPurple",
+                  outlineOffset: "2px",
+                },
+              })}
+            >
+              {dismissLabel}
+            </button>
+          )}
+          <button
+            type="button"
+            autoFocus
+            onClick={onConfirm}
+            className={css({
+              h: "44px",
+              px: "7",
+              rounded: "full",
+              border: "none",
+              cursor: "pointer",
+              bg: "ctaPurple",
+              color: "white",
+              fontFamily: "body",
+              fontWeight: "normal",
+              fontSize: "sm",
+              _hover: { bg: "brand.10" },
+              _focusVisible: {
+                outline: "2px solid",
+                outlineColor: "ctaPurple",
+                outlineOffset: "2px",
+              },
+            })}
+          >
+            {confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /**
  * Tela principal do produto (rota `/`): busca → grid de resultados → favoritar → montar board.
  *
@@ -176,6 +389,18 @@ export function SearchWorkspace({
   // um clique só em "Adicionar +N" faz o append em lote no board.
   const [staged, setStaged] = useState<BoardItem[]>([]);
   const [addingToBoard, setAddingToBoard] = useState(false);
+  // Foto que o usuário tentou favoritar de novo apesar de já estar no board de
+  // destino — dispara o aviso em destaque "Essa imagem já está no board".
+  const [dupeImage, setDupeImage] = useState<SearchImage | null>(null);
+  // Relatório do "Adicionar +N": quais das escolhidas já estavam no board (o
+  // servidor confere e devolve) e quantas de fato entraram.
+  const [dupeReport, setDupeReport] = useState<{ dupes: BoardItem[]; added: number } | null>(
+    null,
+  );
+  // Unsplash ids somados ao board NESTA sessão (append já confirmado) — pra
+  // travar o coração deles também, já que `activeBoard.itemIds` é só o snapshot
+  // da entrada e não reflete o que acabou de entrar.
+  const [sessionAddedIds, setSessionAddedIds] = useState<Set<string>>(new Set());
   // Board de destino atual — pra zerar o staging quando o modo desliga/troca de
   // board sem que o componente remonte (`/` ↔ `/?add=`).
   const [ctxBoardId, setCtxBoardId] = useState<string | null>(activeBoard?.id ?? null);
@@ -183,12 +408,18 @@ export function SearchWorkspace({
     setCtxBoardId(activeBoard?.id ?? null);
     setStaged([]);
     setAddingToBoard(false);
+    setSessionAddedIds(new Set());
   }
   // Unsplash ids que já estão no board de destino — coração cheio + clique
-  // ignorado (não deixa somar a mesma foto duas vezes).
+  // ignorado (não deixa somar a mesma foto duas vezes). Snapshot da entrada +
+  // o que foi somado nesta sessão.
   const boardImageIds = useMemo(
-    () => new Set(activeBoard?.itemIds.map((item) => item.unsplashId) ?? []),
-    [activeBoard],
+    () =>
+      new Set([
+        ...(activeBoard?.itemIds.map((item) => item.unsplashId) ?? []),
+        ...sessionAddedIds,
+      ]),
+    [activeBoard, sessionAddedIds],
   );
 
   const debouncedQuery = useDebouncedValue(query.trim(), 400);
@@ -287,8 +518,12 @@ export function SearchWorkspace({
 
   function toggleFavorite(image: SearchImage) {
     if (activeBoard) {
-      // Já está no board de destino: coração fica cheio, clique não faz nada.
-      if (boardImageIds.has(image.id)) return;
+      // Já está no board de destino: coração fica cheio e o clique avisa em vez
+      // de deixar somar a mesma foto de novo.
+      if (boardImageIds.has(image.id)) {
+        setDupeImage(image);
+        return;
+      }
       setStaged((current) =>
         current.some((item) => item.id === image.id)
           ? current.filter((item) => item.id !== image.id)
@@ -303,14 +538,30 @@ export function SearchWorkspace({
     );
   }
 
+  /** Navega pro board de destino, opcionalmente com a contagem pro toast de lá. */
+  const goToActiveBoard = useCallback(
+    (added?: number) => {
+      if (!activeBoard) return;
+      router.push(
+        added && added > 0
+          ? `/favoritos/${activeBoard.id}?adicionadas=${added}`
+          : `/favoritos/${activeBoard.id}`,
+      );
+    },
+    [activeBoard, router],
+  );
+
   /**
    * "Adicionar +N": soma as inspirações escolhidas no board de destino, num
    * append em lote (`POST /api/boards` com `boardId`, a mesma rota do merge por
-   * nome), e volta pro board com a contagem pro toast de lá.
+   * nome). O servidor confere o que já estava lá e devolve `added` + `skipped`;
+   * se alguma escolhida era duplicata, abre o relatório mostrando quais — senão
+   * volta direto pro board com a contagem pro toast de lá.
    */
   async function addStagedToBoard() {
     if (!activeBoard || staged.length === 0 || addingToBoard) return;
     const count = staged.length;
+    const batch = staged;
     setAddingToBoard(true);
     try {
       const response = await fetch("/api/boards", {
@@ -318,12 +569,14 @@ export function SearchWorkspace({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           boardId: activeBoard.id,
-          items: staged.map((item) => ({
+          items: batch.map((item) => ({
             unsplashId: item.unsplashId,
             imageUrl: item.imageUrl,
             thumbUrl: item.thumbUrl,
             author: item.author,
             description: item.description,
+            width: item.width,
+            height: item.height,
           })),
         }),
       });
@@ -335,8 +588,32 @@ export function SearchWorkspace({
         );
         return;
       }
+      // O servidor descarta o que já estava no board — `added` é o que de fato
+      // entrou, `skipped` são os unsplashId ignorados por já estarem lá.
+      const data = (await response.json().catch(() => null)) as
+        | { added?: number; skipped?: string[] }
+        | null;
+      const added = typeof data?.added === "number" ? data.added : count;
+      const skippedIds = new Set(Array.isArray(data?.skipped) ? data.skipped : []);
+      const dupes = batch.filter((item) => skippedIds.has(item.unsplashId));
+      const freshIds = batch
+        .filter((item) => !skippedIds.has(item.unsplashId))
+        .map((item) => item.unsplashId);
       setStaged([]);
-      router.push(`/favoritos/${activeBoard.id}?adicionadas=${count}`);
+      if (freshIds.length > 0) {
+        setSessionAddedIds((prev) => new Set([...prev, ...freshIds]));
+      }
+      if (dupes.length > 0) {
+        // Não navega ainda — o relatório abre e o botão dele leva ao board.
+        setDupeReport({ dupes, added });
+        return;
+      }
+      if (added === 0) {
+        flashToast("Essas imagens já estavam no board.");
+        goToActiveBoard();
+        return;
+      }
+      goToActiveBoard(added);
     } catch {
       flashToast("Falha de conexão. Tenta de novo.");
     } finally {
@@ -405,6 +682,8 @@ export function SearchWorkspace({
             thumbUrl: item.thumbUrl,
             author: item.author,
             description: item.description,
+            width: item.width,
+            height: item.height,
           })),
         }),
       });
@@ -414,7 +693,19 @@ export function SearchWorkspace({
         return;
       }
 
-      flashToast(mergeInto ? `Adicionado a “${mergeInto.name}”.` : "Salvo.");
+      if (mergeInto) {
+        // Ao somar num board existente, o servidor descarta as fotos que já
+        // estavam lá — `added` diz quantas de fato entraram.
+        const data = (await response.json().catch(() => null)) as { added?: number } | null;
+        const added = typeof data?.added === "number" ? data.added : board.length;
+        flashToast(
+          added === 0
+            ? `Essas imagens já estavam em “${mergeInto.name}”.`
+            : `Adicionado a “${mergeInto.name}”.`,
+        );
+      } else {
+        flashToast("Salvo.");
+      }
       setBoard([]);
       setBoardName("");
       // Atualiza os boards recentes e a lista usada pra casar nomes — assim um
@@ -618,6 +909,7 @@ export function SearchWorkspace({
             status={query.trim() === debouncedQuery ? status : "loading"}
             results={results}
             favoriteIds={favoriteIds}
+            lockedIds={activeBoard ? boardImageIds : undefined}
             onToggleFavorite={toggleFavorite}
           />
         )}
@@ -785,6 +1077,55 @@ export function SearchWorkspace({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Modo contextual: clicou numa foto que já está no board de destino. */}
+      {dupeImage && (
+        <DuplicateDialog
+          title="Essa imagem já está no board"
+          description={`Ela já faz parte de “${activeBoard?.name}”. Não dá pra adicionar a mesma imagem duas vezes ao mesmo board.`}
+          thumbs={[
+            { key: dupeImage.id, description: dupeImage.description, thumbUrl: dupeImage.thumbUrl },
+          ]}
+          confirmLabel="OK"
+          onConfirm={() => setDupeImage(null)}
+          onDismiss={() => setDupeImage(null)}
+        />
+      )}
+
+      {/* "Adicionar +N": parte (ou tudo) das escolhidas já estava no board. */}
+      {dupeReport && (
+        <DuplicateDialog
+          title={
+            dupeReport.dupes.length === 1
+              ? "Uma imagem já estava no board"
+              : `${dupeReport.dupes.length} imagens já estavam no board`
+          }
+          description={
+            dupeReport.added > 0
+              ? `Adicionei ${
+                  dupeReport.added === 1 ? "a outra" : `as outras ${dupeReport.added}`
+                } a “${activeBoard?.name}”. ${
+                  dupeReport.dupes.length === 1 ? "Esta já estava" : "Estas já estavam"
+                } lá:`
+              : `Nada foi adicionado — ${
+                  dupeReport.dupes.length === 1 ? "essa foto já fazia" : "essas fotos já faziam"
+                } parte de “${activeBoard?.name}”.`
+          }
+          thumbs={dupeReport.dupes.map((item) => ({
+            key: item.id,
+            description: item.description,
+            thumbUrl: item.thumbUrl,
+          }))}
+          confirmLabel="Ver board"
+          onConfirm={() => {
+            const added = dupeReport.added;
+            setDupeReport(null);
+            goToActiveBoard(added);
+          }}
+          dismissLabel="Continuar aqui"
+          onDismiss={() => setDupeReport(null)}
+        />
       )}
     </div>
   );

@@ -96,14 +96,17 @@ const heartButton = css({
 export function ResultCard({
   image,
   isFavorite,
+  locked = false,
   onToggleFavorite,
 }: {
   image: SearchImage;
   isFavorite: boolean;
+  /** Já está no board de destino (modo contextual): coração cheio, clique avisa. */
+  locked?: boolean;
   onToggleFavorite: (image: SearchImage) => void;
 }) {
   return (
-    <figure className={card} data-fav={isFavorite}>
+    <figure className={card} data-fav={isFavorite || locked}>
       <ImageTile image={image} />
 
       <figcaption className={overlay} data-role="overlay">
@@ -111,16 +114,18 @@ export function ResultCard({
 
         <button
           type="button"
-          aria-pressed={isFavorite}
+          aria-pressed={isFavorite || locked}
           aria-label={
-            isFavorite
-              ? `Remover "${image.description}" do board`
-              : `Favoritar "${image.description}"`
+            locked
+              ? `"${image.description}" já está neste board`
+              : isFavorite
+                ? `Remover "${image.description}" do board`
+                : `Favoritar "${image.description}"`
           }
           onClick={() => onToggleFavorite(image)}
           className={heartButton}
         >
-          <Heart size={22} weight={isFavorite ? "fill" : "light"} />
+          <Heart size={22} weight={isFavorite || locked ? "fill" : "light"} />
         </button>
       </figcaption>
     </figure>

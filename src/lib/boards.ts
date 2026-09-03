@@ -1,5 +1,6 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
+import { aspectRatioFrom } from "@/lib/unsplash-image";
 import type { Board, BoardSummary, PublicBoard } from "@/types";
 
 /**
@@ -44,7 +45,7 @@ export async function getBoard(id: string): Promise<Board | null> {
   const { data, error } = await supabase
     .from("boards")
     .select(
-      "id, title, slug, search_term, created_at, board_images(id, unsplash_id, image_url, thumb_url, author, description, sort_order)",
+      "id, title, slug, search_term, created_at, board_images(id, unsplash_id, image_url, thumb_url, author, description, width, height, sort_order)",
     )
     .eq("id", id)
     .maybeSingle();
@@ -65,6 +66,10 @@ export async function getBoard(id: string): Promise<Board | null> {
       author: img.author,
       imageUrl: img.image_url,
       thumbUrl: img.thumb_url,
+      width: img.width ?? undefined,
+      height: img.height ?? undefined,
+      // Proporção real da foto — sem isso o `ImageTile` força 4/5 e distorce.
+      aspectRatio: aspectRatioFrom(img.width, img.height),
     }));
 
   return {
@@ -100,6 +105,7 @@ export async function getPublicBoard(slug: string): Promise<PublicBoard | null> 
       thumbUrl: row.thumb_url,
       author: row.author,
       description: row.description,
+      aspectRatio: aspectRatioFrom(row.width, row.height),
     })),
   };
 }

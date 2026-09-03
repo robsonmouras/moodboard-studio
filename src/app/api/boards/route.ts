@@ -25,6 +25,9 @@ interface IncomingItem {
   thumbUrl: string;
   author: string;
   description: string;
+  /** Dimensões da foto — pra reconstruir a proporção no board salvo. Opcional. */
+  width?: number;
+  height?: number;
 }
 
 interface IncomingBody {
@@ -45,6 +48,13 @@ function isItem(value: unknown): value is IncomingItem {
     typeof v.author === "string" &&
     typeof v.description === "string"
   );
+}
+
+/** Dimensão da foto: inteiro positivo ou `null` (boards podem vir sem — ver Fase 3). */
+function toDimension(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) && value > 0
+    ? Math.round(value)
+    : null;
 }
 
 export async function POST(request: Request) {
@@ -80,7 +90,7 @@ export async function POST(request: Request) {
     // outra pessoa ou inexistente volta vazio) e pega a próxima posição livre.
     const { data: target, error: targetError } = await supabase
       .from("boards")
-      .select("slug, board_images(sort_order)")
+      .select("slug, board_images(sort_order, unsplash_id)")
       .eq("id", targetId)
       .maybeSingle();
 
@@ -94,17 +104,49 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: false, error: "board_not_found" }, { status: 404 });
     }
 
+    // Nunca a mesma foto duas vezes no board: descarta o que já está lá (o client
+    // trava isso na UI, mas outra aba / merge por nome também caem aqui).
+    const existingUnsplashIds = new Set(
+      (target.board_images ?? []).map((img) => img.unsplash_id),
+    );
+    // Também dedupa o próprio lote, caso venha repetido.
+    const seenInBatch = new Set<string>();
+    // Unsplash ids que o client mandou mas já estavam no board — devolvidos pra
+    // ele mostrar exatamente QUAIS imagens foram ignoradas.
+    const skipped: string[] = [];
+    const freshItems = items.filter((item) => {
+      if (existingUnsplashIds.has(item.unsplashId)) {
+        skipped.push(item.unsplashId);
+        return false;
+      }
+      if (seenInBatch.has(item.unsplashId)) return false;
+      seenInBatch.add(item.unsplashId);
+      return true;
+    });
+
+    if (freshItems.length === 0) {
+      return NextResponse.json({
+        ok: true,
+        slug: target.slug,
+        merged: true,
+        added: 0,
+        skipped,
+      });
+    }
+
     const nextSort =
       (target.board_images ?? []).reduce((max, img) => Math.max(max, img.sort_order), -1) + 1;
 
     const { error: appendError } = await supabase.from("board_images").insert(
-      items.map((item, index) => ({
+      freshItems.map((item, index) => ({
         board_id: targetId,
         unsplash_id: item.unsplashId,
         image_url: item.imageUrl,
         thumb_url: item.thumbUrl,
         author: item.author,
         description: item.description,
+        width: toDimension(item.width),
+        height: toDimension(item.height),
         sort_order: nextSort + index,
       })),
     );
@@ -113,7 +155,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: false, error: "insert_failed" }, { status: 500 });
     }
 
-    return NextResponse.json({ ok: true, slug: target.slug, merged: true });
+    return NextResponse.json({
+      ok: true,
+      slug: target.slug,
+      merged: true,
+      added: freshItems.length,
+      skipped,
+    });
   }
 
   // --- Criar um board novo -------------------------------------------------
@@ -150,6 +198,8 @@ export async function POST(request: Request) {
       thumb_url: item.thumbUrl,
       author: item.author,
       description: item.description,
+      width: toDimension(item.width),
+      height: toDimension(item.height),
       sort_order: index,
     })),
   );

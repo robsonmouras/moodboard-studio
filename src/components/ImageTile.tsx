@@ -1,5 +1,6 @@
 import Image from "next/image";
 import { css } from "styled-system/css";
+import { unsplashHiRes } from "@/lib/unsplash-image";
 
 /** Proporção usada quando o item não carrega dimensão (imagens de board salvo). */
 const DEFAULT_ASPECT_RATIO = "4 / 5";
@@ -34,7 +35,9 @@ export function ImageTile({
   rounded?: "lg" | "xl";
   sizes?: string;
 }) {
-  const src = image.imageUrl ?? image.thumbUrl;
+  // Foto principal em alta (Unsplash sob demanda); só cai no thumb se não houver
+  // a URL cheia (boards mockados da Fase 1).
+  const src = image.imageUrl ? unsplashHiRes(image.imageUrl) : image.thumbUrl;
 
   return (
     <div
@@ -60,6 +63,7 @@ export function ImageTile({
           alt={image.description}
           fill
           sizes={sizes}
+          quality={90}
           className={css({ objectFit: "cover" })}
         />
       )}

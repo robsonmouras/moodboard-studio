@@ -24,12 +24,15 @@ export function ResultsGrid({
   status,
   results,
   favoriteIds,
+  lockedIds,
   onToggleFavorite,
 }: {
   query: string;
   status: SearchStatus;
   results: SearchImage[];
   favoriteIds: Set<string>;
+  /** Ids já no board de destino (modo contextual) — coração travado. */
+  lockedIds?: Set<string>;
   onToggleFavorite: (image: SearchImage) => void;
 }) {
   if (status === "loading") {
@@ -79,6 +82,7 @@ export function ResultsGrid({
           key={image.id}
           image={image}
           isFavorite={favoriteIds.has(image.id)}
+          locked={lockedIds?.has(image.id) ?? false}
           onToggleFavorite={onToggleFavorite}
         />
       ))}

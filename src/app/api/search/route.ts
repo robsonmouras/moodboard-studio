@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { unsplashHiRes } from "@/lib/unsplash-image";
 import type { SearchApiResponse, SearchImage } from "@/types";
 
 /**
@@ -36,8 +37,12 @@ function toSearchImage(photo: UnsplashPhoto): SearchImage {
     description: photo.description ?? photo.alt_description ?? "Imagem sem descrição",
     author: photo.user.name,
     aspectRatio: hasSize ? `${photo.width} / ${photo.height}` : "1 / 1",
-    imageUrl: photo.urls.regular,
-    thumbUrl: photo.urls.thumb,
+    width: photo.width,
+    height: photo.height,
+    // A partir de `urls.raw` (sem recorte), pede a foto em alta pela Unsplash —
+    // é o que vai pra tela e o que se grava no board (não trava mais em 1080px).
+    imageUrl: unsplashHiRes(photo.urls.raw),
+    thumbUrl: photo.urls.small,
   };
 }
 

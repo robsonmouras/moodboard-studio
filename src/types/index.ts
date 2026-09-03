@@ -22,7 +22,11 @@ export interface SearchImage {
   author: string;
   /** `width / height` da foto, no formato aceito por `aspect-ratio` (ex.: "3 / 4"). */
   aspectRatio: string;
-  /** `urls.regular` — imagem em tamanho de exibição. */
+  /** `width` da foto na Unsplash — persistido pra reconstruir a proporção no board salvo. */
+  width: number;
+  /** `height` da foto na Unsplash. */
+  height: number;
+  /** Foto em alta (Unsplash sob demanda), pronta pra exibição e pra salvar no board. */
   imageUrl: string;
   /** `urls.thumb` — miniatura, para grids densos como o board. */
   thumbUrl: string;
@@ -43,8 +47,14 @@ export interface BoardItem {
   author: string;
   imageUrl: string;
   thumbUrl: string;
-  /** Só presente enquanto o item vem da busca (antes de salvar). */
+  /**
+   * Proporção da foto (`"3 / 4"`). Vem da busca e, desde 09/2026, é reconstruída
+   * de `width`/`height` no board salvo. Indefinida em boards antigos → padrão do tile.
+   */
   aspectRatio?: string;
+  /** Dimensões da foto na Unsplash — persistidas em `board_images` desde 09/2026. */
+  width?: number;
+  height?: number;
 }
 
 /** Resposta da Route Handler `GET /api/search`. */
@@ -105,5 +115,7 @@ export interface PublicBoard {
     thumbUrl: string;
     author: string;
     description: string;
+    /** Proporção reconstruída de `width`/`height` (indefinida em boards antigos). */
+    aspectRatio?: string;
   }[];
 }

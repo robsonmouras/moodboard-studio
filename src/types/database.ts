@@ -52,6 +52,8 @@ export type Database = {
           thumb_url: string;
           author: string;
           description: string;
+          width: number | null;
+          height: number | null;
           sort_order: number;
           created_at: string;
         };
@@ -63,6 +65,8 @@ export type Database = {
           thumb_url: string;
           author: string;
           description: string;
+          width?: number | null;
+          height?: number | null;
           sort_order?: number;
           created_at?: string;
         };
@@ -74,6 +78,8 @@ export type Database = {
           thumb_url?: string;
           author?: string;
           description?: string;
+          width?: number | null;
+          height?: number | null;
           sort_order?: number;
           created_at?: string;
         };
@@ -101,6 +107,8 @@ export type Database = {
           thumb_url: string;
           author: string;
           description: string;
+          width: number | null;
+          height: number | null;
           sort_order: number;
         }[];
       };
