@@ -189,7 +189,7 @@ function DuplicateDialog({
           rounded: "2xl",
           boxShadow: "xl",
           p: "6",
-          transformOrigin: "center",
+          "--transform-origin": "center",
           animationStyle: "scale-fade-in",
           animationDuration: "fast",
         })}
