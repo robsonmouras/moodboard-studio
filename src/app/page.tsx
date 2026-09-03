@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { SearchWorkspace } from "@/components/SearchWorkspace";
-import { getBoard, listBoards } from "@/lib/boards";
+import { getBoard, listBoardMemberships, listBoards } from "@/lib/boards";
 
 /**
  * Home do produto (`/`) — a tela onde a Marina faz a busca.
@@ -31,7 +31,11 @@ export default async function Home({
   searchParams: Promise<{ add?: string }>;
 }) {
   const { add } = await searchParams;
-  const boards = await listBoards();
+  const [boards, boardMemberships] = await Promise.all([
+    listBoards(),
+    // Mapa foto → boards que já a contêm, pra marcar os resultados da busca.
+    listBoardMemberships(),
+  ]);
 
   // Modo contextual: só liga se o `add` aponta pra um board que é mesmo do usuário.
   let activeBoard: {
@@ -60,6 +64,7 @@ export default async function Home({
       // Lista enxuta (id + nome) pra checar, na hora de salvar, se o nome digitado
       // bate com um board que já existe — e oferecer somar nele em vez de duplicar.
       existingBoards={boards.map((board) => ({ id: board.id, name: board.name }))}
+      boardMemberships={boardMemberships}
       activeBoard={activeBoard}
     />
   );

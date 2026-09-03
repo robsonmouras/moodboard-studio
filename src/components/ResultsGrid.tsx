@@ -24,15 +24,15 @@ export function ResultsGrid({
   status,
   results,
   favoriteIds,
-  lockedIds,
+  inBoardLabels,
   onToggleFavorite,
 }: {
   query: string;
   status: SearchStatus;
   results: SearchImage[];
   favoriteIds: Set<string>;
-  /** Ids já no board de destino (modo contextual) — coração travado. */
-  lockedIds?: Set<string>;
+  /** `unsplashId → { label, title }` do selo "em «Board»" quando a foto já está salva. */
+  inBoardLabels?: Map<string, { label: string; title: string }>;
   onToggleFavorite: (image: SearchImage) => void;
 }) {
   if (status === "loading") {
@@ -77,15 +77,19 @@ export function ResultsGrid({
         columnGap: "3",
       })}
     >
-      {results.map((image) => (
-        <ResultCard
-          key={image.id}
-          image={image}
-          isFavorite={favoriteIds.has(image.id)}
-          locked={lockedIds?.has(image.id) ?? false}
-          onToggleFavorite={onToggleFavorite}
-        />
-      ))}
+      {results.map((image) => {
+        const badge = inBoardLabels?.get(image.id);
+        return (
+          <ResultCard
+            key={image.id}
+            image={image}
+            isFavorite={favoriteIds.has(image.id)}
+            inBoardLabel={badge?.label}
+            inBoardTitle={badge?.title}
+            onToggleFavorite={onToggleFavorite}
+          />
+        );
+      })}
     </div>
   );
 }

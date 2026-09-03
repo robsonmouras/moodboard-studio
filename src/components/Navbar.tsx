@@ -106,7 +106,7 @@ export function Navbar() {
                 fontFamily: "body",
                 fontSize: "sm",
                 transition: "color 0.15s ease",
-                fontWeight: active ? "semibold" : "normal",
+                fontWeight: "normal",
                 color: active ? "ctaPurple" : "gray.11",
                 _hover: { color: active ? "ctaPurple" : "textPrimary" },
               })}

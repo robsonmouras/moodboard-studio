@@ -122,6 +122,33 @@ function deriveSearchState(
 type DupeThumb = { key: string; description: string; thumbUrl?: string };
 
 /**
+ * Título + descrição do aviso de duplicata, com singular/plural nos DOIS números:
+ * `added` (quantas entraram de fato) e `dupeCount` (quantas já estavam no board).
+ */
+function dupeReportCopy(dupeCount: number, added: number, boardName: string) {
+  const title =
+    dupeCount === 1
+      ? "Uma imagem já estava no board"
+      : `${dupeCount} imagens já estavam no board`;
+
+  const dupesPhrase =
+    dupeCount === 1 ? "Esta é a que já estava lá:" : "Estas são as que já estavam lá:";
+
+  const description =
+    added > 0
+      ? `${
+          added === 1
+            ? "A outra imagem foi adicionada"
+            : `As outras ${added} imagens foram adicionadas`
+        } a “${boardName}”. ${dupesPhrase}`
+      : `Nada foi adicionado a “${boardName}” — ${
+          dupeCount === 1 ? "essa imagem já fazia" : "essas imagens já faziam"
+        } parte dele.`;
+
+  return { title, description };
+}
+
+/**
  * Aviso em destaque (modal) de que uma ou mais imagens já estão no board de
  * destino — o produto não deixa a mesma foto entrar duas vezes. Grande, com
  * ícone e as miniaturas exatas das imagens ignoradas, pra não passar batido.
@@ -359,11 +386,14 @@ export function SearchWorkspace({
   recentBoards,
   totalBoardCount,
   existingBoards,
+  boardMemberships = {},
   activeBoard = null,
 }: {
   recentBoards: BoardSummary[];
   totalBoardCount: number;
   existingBoards: ExistingBoard[];
+  /** `unsplashId → nomes dos boards do usuário que já têm essa foto` (marca os resultados). */
+  boardMemberships?: Record<string, string[]>;
   activeBoard?: ActiveBoard | null;
 }) {
   const router = useRouter();
@@ -389,14 +419,16 @@ export function SearchWorkspace({
   // um clique só em "Adicionar +N" faz o append em lote no board.
   const [staged, setStaged] = useState<BoardItem[]>([]);
   const [addingToBoard, setAddingToBoard] = useState(false);
-  // Foto que o usuário tentou favoritar de novo apesar de já estar no board de
-  // destino — dispara o aviso em destaque "Essa imagem já está no board".
-  const [dupeImage, setDupeImage] = useState<SearchImage | null>(null);
-  // Relatório do "Adicionar +N": quais das escolhidas já estavam no board (o
-  // servidor confere e devolve) e quantas de fato entraram.
-  const [dupeReport, setDupeReport] = useState<{ dupes: BoardItem[]; added: number } | null>(
-    null,
-  );
+  // Relatório de duplicata: quais imagens que o usuário mandou salvar já estavam
+  // no board de destino (o servidor confere e devolve), e quantas de fato
+  // entraram. Vale para os dois caminhos que somam num board existente:
+  // "Adicionar +N" (modo contextual) e "Salvar" → nome de board que já existe.
+  const [dupeReport, setDupeReport] = useState<{
+    dupes: BoardItem[];
+    added: number;
+    boardId: string;
+    boardName: string;
+  } | null>(null);
   // Unsplash ids somados ao board NESTA sessão (append já confirmado) — pra
   // travar o coração deles também, já que `activeBoard.itemIds` é só o snapshot
   // da entrada e não reflete o que acabou de entrar.
@@ -423,16 +455,43 @@ export function SearchWorkspace({
   );
 
   const debouncedQuery = useDebouncedValue(query.trim(), 400);
+  // Coração cheio = está na seleção atual. No modo contextual isso é só o
+  // `staged` (o "já no board" é sinalizado pelo selo, não pelo coração).
   const favoriteIds = useMemo(
     () =>
       activeBoard
-        ? new Set([...boardImageIds, ...staged.map((item) => item.id)])
+        ? new Set(staged.map((item) => item.id))
         : new Set(board.map((item) => item.id)),
-    [activeBoard, boardImageIds, staged, board],
+    [activeBoard, staged, board],
   );
   // Bottom bar na tela? (board em construção no fluxo normal, escolhas pendentes
   // no modo contextual) — dirige o respiro no rodapé e a altura do toast.
   const panelOpen = activeBoard ? staged.length > 0 : board.length > 0;
+
+  // Selo por resultado: "em «Board»" quando a foto já está salva em algum board
+  // do usuário; "já neste board" no modo contextual (esse ganha do outro). O
+  // `title` traz a lista completa quando a foto está em vários.
+  const inBoardLabels = useMemo(() => {
+    const map = new Map<string, { label: string; title: string }>();
+    if (activeBoard) {
+      for (const id of boardImageIds) {
+        map.set(id, { label: "já neste board", title: `Já está em “${activeBoard.name}”` });
+      }
+    }
+    for (const unsplashId in boardMemberships) {
+      if (map.has(unsplashId)) continue;
+      const names = boardMemberships[unsplashId];
+      if (!names || names.length === 0) continue;
+      map.set(unsplashId, {
+        label: names.length === 1 ? `em ${names[0]}` : `em ${names[0]} +${names.length - 1}`,
+        title:
+          names.length === 1
+            ? `Já está em “${names[0]}”`
+            : `Já está em: ${names.map((name) => `“${name}”`).join(", ")}`,
+      });
+    }
+    return map;
+  }, [activeBoard, boardImageIds, boardMemberships]);
 
   // Sugestões de autocomplete pro campo "Nome do board": boards já salvos cujo
   // nome CONTÉM o que foi digitado (ex.: "veloz" → "Board moto veloz"). Some
@@ -518,12 +577,9 @@ export function SearchWorkspace({
 
   function toggleFavorite(image: SearchImage) {
     if (activeBoard) {
-      // Já está no board de destino: coração fica cheio e o clique avisa em vez
-      // de deixar somar a mesma foto de novo.
-      if (boardImageIds.has(image.id)) {
-        setDupeImage(image);
-        return;
-      }
+      // Seleção livre — inclusive de fotos que já estão no board (ganham o selo
+      // "No board" no grid). A validação no "Adicionar +N" mostra quais já
+      // estavam lá e ignora as repetidas, sem interromper a cada clique.
       setStaged((current) =>
         current.some((item) => item.id === image.id)
           ? current.filter((item) => item.id !== image.id)
@@ -538,17 +594,14 @@ export function SearchWorkspace({
     );
   }
 
-  /** Navega pro board de destino, opcionalmente com a contagem pro toast de lá. */
-  const goToActiveBoard = useCallback(
-    (added?: number) => {
-      if (!activeBoard) return;
+  /** Abre a tela de um board, opcionalmente com a contagem pro toast de lá. */
+  const openBoard = useCallback(
+    (boardId: string, added = 0) => {
       router.push(
-        added && added > 0
-          ? `/favoritos/${activeBoard.id}?adicionadas=${added}`
-          : `/favoritos/${activeBoard.id}`,
+        added > 0 ? `/favoritos/${boardId}?adicionadas=${added}` : `/favoritos/${boardId}`,
       );
     },
-    [activeBoard, router],
+    [router],
   );
 
   /**
@@ -605,15 +658,15 @@ export function SearchWorkspace({
       }
       if (dupes.length > 0) {
         // Não navega ainda — o relatório abre e o botão dele leva ao board.
-        setDupeReport({ dupes, added });
+        setDupeReport({ dupes, added, boardId: activeBoard.id, boardName: activeBoard.name });
         return;
       }
       if (added === 0) {
         flashToast("Essas imagens já estavam no board.");
-        goToActiveBoard();
+        openBoard(activeBoard.id);
         return;
       }
-      goToActiveBoard(added);
+      openBoard(activeBoard.id, added);
     } catch {
       flashToast("Falha de conexão. Tenta de novo.");
     } finally {
@@ -693,24 +746,33 @@ export function SearchWorkspace({
         return;
       }
 
-      if (mergeInto) {
-        // Ao somar num board existente, o servidor descarta as fotos que já
-        // estavam lá — `added` diz quantas de fato entraram.
-        const data = (await response.json().catch(() => null)) as { added?: number } | null;
-        const added = typeof data?.added === "number" ? data.added : board.length;
-        flashToast(
-          added === 0
-            ? `Essas imagens já estavam em “${mergeInto.name}”.`
-            : `Adicionado a “${mergeInto.name}”.`,
-        );
-      } else {
-        flashToast("Salvo.");
-      }
+      // O que foi mandado (o relatório de duplicata precisa das miniaturas).
+      const submitted = board;
+      const data = (await response.json().catch(() => null)) as
+        | { added?: number; skipped?: string[] }
+        | null;
+
       setBoard([]);
       setBoardName("");
       // Atualiza os boards recentes e a lista usada pra casar nomes — assim um
       // segundo "Salvar" na mesma sessão já enxerga o board recém-criado.
       router.refresh();
+
+      if (mergeInto) {
+        // Ao somar num board existente, o servidor descarta as fotos que já
+        // estavam lá e devolve `added` + `skipped` (unsplashIds ignorados).
+        const added = typeof data?.added === "number" ? data.added : submitted.length;
+        const skippedIds = new Set(Array.isArray(data?.skipped) ? data.skipped : []);
+        const dupes = submitted.filter((item) => skippedIds.has(item.unsplashId));
+        if (dupes.length > 0) {
+          // Mesma modal do "Adicionar +N": mostra QUAIS imagens já estavam lá.
+          setDupeReport({ dupes, added, boardId: mergeInto.id, boardName: mergeInto.name });
+        } else {
+          flashToast(`Adicionado a “${mergeInto.name}”.`);
+        }
+        return;
+      }
+      flashToast("Salvo.");
     } catch {
       flashToast("Falha de conexão. Tenta de novo.");
     } finally {
@@ -909,7 +971,7 @@ export function SearchWorkspace({
             status={query.trim() === debouncedQuery ? status : "loading"}
             results={results}
             favoriteIds={favoriteIds}
-            lockedIds={activeBoard ? boardImageIds : undefined}
+            inBoardLabels={inBoardLabels}
             onToggleFavorite={toggleFavorite}
           />
         )}
@@ -1079,39 +1141,11 @@ export function SearchWorkspace({
         </div>
       )}
 
-      {/* Modo contextual: clicou numa foto que já está no board de destino. */}
-      {dupeImage && (
-        <DuplicateDialog
-          title="Essa imagem já está no board"
-          description={`Ela já faz parte de “${activeBoard?.name}”. Não dá pra adicionar a mesma imagem duas vezes ao mesmo board.`}
-          thumbs={[
-            { key: dupeImage.id, description: dupeImage.description, thumbUrl: dupeImage.thumbUrl },
-          ]}
-          confirmLabel="OK"
-          onConfirm={() => setDupeImage(null)}
-          onDismiss={() => setDupeImage(null)}
-        />
-      )}
-
-      {/* "Adicionar +N": parte (ou tudo) das escolhidas já estava no board. */}
+      {/* Somou num board que já existe ("Adicionar +N" ou "Salvar" com nome de
+          board existente) e parte (ou tudo) das imagens já estava lá. */}
       {dupeReport && (
         <DuplicateDialog
-          title={
-            dupeReport.dupes.length === 1
-              ? "Uma imagem já estava no board"
-              : `${dupeReport.dupes.length} imagens já estavam no board`
-          }
-          description={
-            dupeReport.added > 0
-              ? `Adicionei ${
-                  dupeReport.added === 1 ? "a outra" : `as outras ${dupeReport.added}`
-                } a “${activeBoard?.name}”. ${
-                  dupeReport.dupes.length === 1 ? "Esta já estava" : "Estas já estavam"
-                } lá:`
-              : `Nada foi adicionado — ${
-                  dupeReport.dupes.length === 1 ? "essa foto já fazia" : "essas fotos já faziam"
-                } parte de “${activeBoard?.name}”.`
-          }
+          {...dupeReportCopy(dupeReport.dupes.length, dupeReport.added, dupeReport.boardName)}
           thumbs={dupeReport.dupes.map((item) => ({
             key: item.id,
             description: item.description,
@@ -1119,9 +1153,9 @@ export function SearchWorkspace({
           }))}
           confirmLabel="Ver board"
           onConfirm={() => {
-            const added = dupeReport.added;
+            const { boardId, added } = dupeReport;
             setDupeReport(null);
-            goToActiveBoard(added);
+            openBoard(boardId, added);
           }}
           dismissLabel="Continuar aqui"
           onDismiss={() => setDupeReport(null)}

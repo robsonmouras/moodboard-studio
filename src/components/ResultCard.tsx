@@ -1,6 +1,6 @@
 "use client";
 
-import { Heart } from "@phosphor-icons/react";
+import { Check, Heart } from "@phosphor-icons/react";
 import { css } from "styled-system/css";
 import { ImageTile } from "@/components/ImageTile";
 import type { SearchImage } from "@/types";
@@ -35,6 +35,38 @@ const card = css({
     "& [data-role='overlay']": { opacity: "1" },
   },
   "&[data-fav='true'] [data-role='overlay']": { opacity: "1" },
+});
+
+// Selo permanente no canto: esta foto já está salva em algum board do usuário
+// (mostra o nome do board). O usuário ainda pode marcá-la — a validação final
+// avisa e ignora —, mas fica claro de cara onde ela já está.
+const inBoardBadge = css({
+  position: "absolute",
+  top: "2",
+  left: "2",
+  maxW: "calc(100% - 1rem)",
+  display: "inline-flex",
+  alignItems: "center",
+  gap: "1",
+  pl: "1.5",
+  pr: "2.5",
+  py: "1",
+  rounded: "full",
+  bg: "brand.9",
+  color: "white",
+  fontFamily: "body",
+  fontSize: "11px",
+  fontWeight: "medium",
+  lineHeight: "1.2",
+  boxShadow: "sm",
+  pointerEvents: "none",
+});
+
+const inBoardBadgeText = css({
+  minW: "0",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
 });
 
 const overlay = css({
@@ -96,36 +128,51 @@ const heartButton = css({
 export function ResultCard({
   image,
   isFavorite,
-  locked = false,
+  inBoardLabel,
+  inBoardTitle,
   onToggleFavorite,
 }: {
   image: SearchImage;
   isFavorite: boolean;
-  /** Já está no board de destino (modo contextual): coração cheio, clique avisa. */
-  locked?: boolean;
+  /**
+   * Selo no canto: "em «Board»" quando a foto já está salva em algum board do
+   * usuário (ou "já neste board" no modo contextual). Só informativo — o clique
+   * continua livre; a validação final avisa quais já estavam lá e ignora as repetidas.
+   */
+  inBoardLabel?: string;
+  /** Texto completo pro `title` quando a foto está em vários boards. */
+  inBoardTitle?: string;
   onToggleFavorite: (image: SearchImage) => void;
 }) {
+  const inBoard = Boolean(inBoardLabel);
   return (
-    <figure className={card} data-fav={isFavorite || locked}>
+    <figure className={card} data-fav={isFavorite}>
       <ImageTile image={image} />
+
+      {inBoardLabel && (
+        <span className={inBoardBadge} title={inBoardTitle ?? inBoardLabel}>
+          <Check size={11} weight="bold" aria-hidden />
+          <span className={inBoardBadgeText}>{inBoardLabel}</span>
+        </span>
+      )}
 
       <figcaption className={overlay} data-role="overlay">
         <span className={authorName}>{image.author}</span>
 
         <button
           type="button"
-          aria-pressed={isFavorite || locked}
+          aria-pressed={isFavorite}
           aria-label={
-            locked
-              ? `"${image.description}" já está neste board`
-              : isFavorite
-                ? `Remover "${image.description}" do board`
-                : `Favoritar "${image.description}"`
+            isFavorite
+              ? `Tirar "${image.description}" da seleção`
+              : inBoard
+                ? `Marcar "${image.description}" (${inBoardTitle ?? inBoardLabel})`
+                : `Marcar "${image.description}"`
           }
           onClick={() => onToggleFavorite(image)}
           className={heartButton}
         >
-          <Heart size={22} weight={isFavorite || locked ? "fill" : "light"} />
+          <Heart size={22} weight={isFavorite ? "fill" : "light"} />
         </button>
       </figcaption>
     </figure>

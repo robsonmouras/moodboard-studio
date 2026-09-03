@@ -38,6 +38,30 @@ export async function listBoards(): Promise<BoardSummary[]> {
   });
 }
 
+/**
+ * Mapa `unsplashId → nomes dos boards do usuário que contêm aquela foto`, do
+ * board mais recente pro mais antigo. Usado na busca da home pra marcar cada
+ * resultado com "em «Board»" quando ele já está salvo em algum lugar.
+ */
+export async function listBoardMemberships(): Promise<Record<string, string[]>> {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("boards")
+    .select("title, board_images(unsplash_id)")
+    .order("created_at", { ascending: false });
+
+  if (error) throw new Error(`listBoardMemberships: ${error.message}`);
+
+  const map: Record<string, string[]> = {};
+  for (const board of data ?? []) {
+    for (const image of board.board_images ?? []) {
+      (map[image.unsplash_id] ??= []).push(board.title);
+    }
+  }
+  return map;
+}
+
 /** Um board do usuário logado, com todas as imagens. `null` se não existe/não é dele. */
 export async function getBoard(id: string): Promise<Board | null> {
   const supabase = await createClient();
