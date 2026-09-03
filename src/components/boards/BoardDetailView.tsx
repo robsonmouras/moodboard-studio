@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, LinkSimple, Trash, X } from "@phosphor-icons/react";
+import { ArrowLeft, LinkSimple, Plus, Trash, X } from "@phosphor-icons/react";
 import { css } from "styled-system/css";
 import { iconDefaults } from "@/components/Icon";
 import { ImageTile } from "@/components/ImageTile";
@@ -78,6 +78,110 @@ const headerButton = css(headerButtonBase, { _hover: { bg: "gray.2" } });
 // "Excluir board": mesmo botão, mas no hover só o ÍCONE vira vermelho (fundo igual).
 const dangerIconHover = css({ _hover: { "& svg": { color: "red.11" } } });
 
+// "Adicionar inspirações": ação primária do header — leva pra busca no modo
+// contextual (`/?add=<id>`), onde favoritar grava direto neste board.
+const addButton = css({
+  display: "inline-flex",
+  alignItems: "center",
+  gap: "1.5",
+  flexShrink: "0",
+  h: "40px",
+  px: "4",
+  rounded: "full",
+  border: "none",
+  cursor: "pointer",
+  bg: "ctaPurple",
+  color: "white",
+  fontFamily: "body",
+  fontWeight: "semibold",
+  fontSize: "sm",
+  transition: "background-color 0.15s ease",
+  _hover: { bg: "brand.10" },
+  _focusVisible: { outline: "2px solid", outlineColor: "ctaPurple", outlineOffset: "2px" },
+});
+
+/**
+ * Card de uma inspiração no board — mesmo tratamento do grid de busca
+ * (`ResultCard`): em repouso é só a foto; no hover (ou foco) a imagem dá um zoom
+ * leve e sobe um overlay com o crédito do autor e a ação de remover.
+ */
+const photoCard = css({
+  display: "block",
+  mb: "3",
+  breakInside: "avoid",
+  position: "relative",
+  rounded: "xl",
+  overflow: "hidden",
+  bg: "gray.3",
+  "& img": {
+    transition: "transform 0.5s cubic-bezier(0.2, 0, 0, 1)",
+  },
+  _hover: {
+    "& img": { transform: "scale(1.045)" },
+    "& [data-role='overlay']": { opacity: "1" },
+  },
+  _focusWithin: {
+    "& [data-role='overlay']": { opacity: "1" },
+  },
+});
+
+const photoOverlay = css({
+  position: "absolute",
+  insetInline: "0",
+  bottom: "0",
+  display: "flex",
+  alignItems: "flex-end",
+  justifyContent: "space-between",
+  gap: "3",
+  px: "3",
+  pt: "12",
+  pb: "2.5",
+  backgroundImage: "linear-gradient(to top, token(colors.black.a9), transparent)",
+  // Toque (sem hover) mostra sempre; no desktop, revela no hover/foco.
+  opacity: { base: "1", md: "0" },
+  transition: "opacity 0.25s ease",
+  pointerEvents: "none",
+});
+
+const photoAuthor = css({
+  minW: "0",
+  flex: "1",
+  color: "white",
+  fontFamily: "body",
+  fontSize: "xs",
+  lineHeight: "1.3",
+  textShadow: "0 1px 2px token(colors.black.a7)",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+});
+
+// Sem "botão" visível — o X fica direto sobre o gradiente, na mesma linha do
+// crédito, como o coração de favoritar no grid de busca.
+const removeButton = css({
+  pointerEvents: "auto",
+  flexShrink: "0",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  w: "8",
+  h: "8",
+  mr: "-1",
+  mb: "-0.5",
+  rounded: "full",
+  border: "none",
+  cursor: "pointer",
+  bg: "transparent",
+  color: "white",
+  filter: "drop-shadow(0 1px 3px token(colors.black.a9))",
+  transitionProperty: "transform",
+  transitionDuration: "0.15s",
+  _hover: { transform: "scale(1.12)" },
+  _active: { transform: "scale(0.9)" },
+  _disabled: { opacity: 0.5, cursor: "not-allowed" },
+  _focusVisible: { outline: "2px solid", outlineColor: "white", outlineOffset: "1px" },
+});
+
 /**
  * Detalhe de um board (`/favoritos/[id]`).
  *
@@ -86,7 +190,14 @@ const dangerIconHover = css({ _hover: { "& svg": { color: "red.11" } } });
  * `on delete cascade` cuida das imagens) — tudo via server action, escrita real.
  * "Copiar link" copia `<origem>/b/<slug>` pra área de transferência.
  */
-export function BoardDetailView({ board }: { board: Board }) {
+export function BoardDetailView({
+  board,
+  justAdded = 0,
+}: {
+  board: Board;
+  /** Nº de inspirações recém-adicionadas no modo contextual (`?adicionadas=N`). */
+  justAdded?: number;
+}) {
   const router = useRouter();
   const [name, setName] = useState(board.name);
   const [syncedName, setSyncedName] = useState(board.name);
@@ -106,6 +217,20 @@ export function BoardDetailView({ board }: { board: Board }) {
     return () => {
       if (toastTimer.current) clearTimeout(toastTimer.current);
     };
+  }, []);
+
+  // Voltou da busca no modo contextual com inspirações novas: toast de contagem
+  // e limpa o `?adicionadas=` da URL pra não repetir num refresh.
+  useEffect(() => {
+    if (justAdded < 1) return;
+    queueMicrotask(() => {
+      flashToast(
+        `${justAdded} ${justAdded === 1 ? "inspiração adicionada" : "inspirações adicionadas"}.`,
+      );
+    });
+    router.replace(`/favoritos/${board.id}`, { scroll: false });
+    // Só na montagem — `justAdded` vem da URL de entrada.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function flashToast(message: string) {
@@ -234,7 +359,19 @@ export function BoardDetailView({ board }: { board: Board }) {
             </span>
           </div>
 
-          <div className={css({ display: "flex", alignItems: "center", gap: "2", flexShrink: "0" })}>
+          <div
+            className={css({
+              display: "flex",
+              alignItems: "center",
+              flexWrap: "wrap",
+              gap: "2",
+              flexShrink: "0",
+            })}
+          >
+            <Link href={`/?add=${board.id}`} className={addButton}>
+              <Plus {...iconDefaults} size={16} aria-hidden />
+              Adicionar inspirações
+            </Link>
             <button type="button" onClick={copyLink} className={headerButton}>
               <LinkSimple {...iconDefaults} size={16} aria-hidden />
               Copiar link
@@ -275,53 +412,28 @@ export function BoardDetailView({ board }: { board: Board }) {
             <p className={css({ fontFamily: "body", fontSize: "sm", color: "gray.11", maxW: "44ch" })}>
               Volte pra busca e favorite algumas referências pra colocar aqui.
             </p>
-            <Link href="/" className={ctaLink}>
-              Buscar referências
+            <Link href={`/?add=${board.id}`} className={ctaLink}>
+              Adicionar inspirações
             </Link>
           </div>
         ) : (
           <div className={css({ columnCount: { base: 2, md: 3 }, columnGap: "3" })}>
             {board.items.map((item) => (
-              <figure
-                key={item.id}
-                className={css({ display: "block", mb: "3", breakInside: "avoid", position: "relative" })}
-              >
+              <figure key={item.id} className={photoCard}>
                 <ImageTile image={item} />
-                <button
-                  type="button"
-                  disabled={pending}
-                  aria-label={`Remover “${item.description}” do board`}
-                  onClick={() => handleRemoveImage(item.id)}
-                  className={css({
-                    position: "absolute",
-                    top: "2.5",
-                    right: "2.5",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    w: "9",
-                    h: "9",
-                    rounded: "full",
-                    border: "none",
-                    cursor: "pointer",
-                    bg: "surface",
-                    color: "textPrimary",
-                    boxShadow: "sm",
-                    _hover: { bg: "gray.2" },
-                    _disabled: { opacity: 0.5, cursor: "not-allowed" },
-                    _focusVisible: {
-                      outline: "2px solid",
-                      outlineColor: "ctaPurple",
-                      outlineOffset: "2px",
-                    },
-                  })}
-                >
-                  <X {...iconDefaults} size={16} />
-                </button>
-                <figcaption
-                  className={css({ mt: "1.5", fontFamily: "body", fontSize: "xs", color: "gray.11" })}
-                >
-                  {item.author}
+
+                <figcaption className={photoOverlay} data-role="overlay">
+                  <span className={photoAuthor}>{item.author}</span>
+
+                  <button
+                    type="button"
+                    disabled={pending}
+                    aria-label={`Remover “${item.description}” do board`}
+                    onClick={() => handleRemoveImage(item.id)}
+                    className={removeButton}
+                  >
+                    <X size={20} weight="light" aria-hidden />
+                  </button>
                 </figcaption>
               </figure>
             ))}

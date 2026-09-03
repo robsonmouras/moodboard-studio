@@ -8,6 +8,10 @@ import { getBoard } from "@/lib/boards";
  *
  * Fase 3: o board vem do Supabase (RLS garante que só o dono lê). Server Component
  * resolve o board; a interatividade vive em <BoardDetailView>.
+ *
+ * `?adicionadas=N` chega de volta do modo contextual da busca ("Adicionar
+ * inspirações" → favoritar → "Voltar ao board"): vira o toast "N inspirações
+ * adicionadas." e é limpo da URL pelo próprio <BoardDetailView>.
  */
 export const metadata: Metadata = {
   title: "Board — Moodboard Studio",
@@ -17,12 +21,19 @@ export const dynamic = "force-dynamic";
 
 export default async function BoardPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ adicionadas?: string }>;
 }) {
   const { id } = await params;
+  const { adicionadas } = await searchParams;
   const board = await getBoard(id);
 
   if (!board) return <BoardNotFound />;
-  return <BoardDetailView board={board} />;
+
+  const parsed = Number(adicionadas);
+  const justAdded = Number.isInteger(parsed) && parsed > 0 ? parsed : 0;
+
+  return <BoardDetailView board={board} justAdded={justAdded} />;
 }

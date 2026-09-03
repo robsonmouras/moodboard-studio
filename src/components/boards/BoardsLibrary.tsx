@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { MagnifyingGlass } from "@phosphor-icons/react";
+import { MagnifyingGlass, X } from "@phosphor-icons/react";
 import { css } from "styled-system/css";
 import { BoardCard } from "@/components/boards/BoardCard";
 import { iconDefaults } from "@/components/Icon";
@@ -121,6 +121,34 @@ export function BoardsLibrary({ boards }: { boards: BoardSummary[] }) {
                 _focusVisible: { outline: "none" },
               })}
             />
+            {query.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setQuery("")}
+                aria-label="Limpar busca"
+                className={css({
+                  flexShrink: "0",
+                  display: "grid",
+                  placeItems: "center",
+                  w: "26px",
+                  h: "26px",
+                  rounded: "full",
+                  border: "none",
+                  cursor: "pointer",
+                  bg: "transparent",
+                  color: "gray.11",
+                  transition: "background-color 0.15s ease, color 0.15s ease",
+                  _hover: { bg: "gray.3", color: "gray.12" },
+                  _focusVisible: {
+                    outline: "2px solid",
+                    outlineColor: "ctaPurple",
+                    outlineOffset: "2px",
+                  },
+                })}
+              >
+                <X {...iconDefaults} size={14} aria-hidden />
+              </button>
+            )}
           </div>
         )}
 

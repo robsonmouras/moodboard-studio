@@ -19,25 +19,32 @@ import type { BoardItem } from "@/types";
  * O campo de nome tem autocomplete: `nameSuggestions` traz os boards já salvos
  * cujo nome contém o que foi digitado (calculado no `SearchWorkspace`). Escolher
  * uma sugestão só preenche o campo — o "Salvar" ainda confirma somar no board.
+ *
+ * `variant="append"` (modo contextual "Adicionar inspirações"): sem campo de
+ * nome — o destino já é um board existente. A barra conta as escolhidas e o
+ * botão soma tudo de uma vez ("Adicionar +N").
  */
 export function BoardPanel({
-  name,
+  name = "",
   items,
   saving = false,
   nameSuggestions = [],
-  onNameChange,
+  variant = "create",
+  onNameChange = () => {},
   onRemove,
   onSave,
 }: {
-  name: string;
+  name?: string;
   items: BoardItem[];
   saving?: boolean;
   nameSuggestions?: string[];
-  onNameChange: (name: string) => void;
+  variant?: "create" | "append";
+  onNameChange?: (name: string) => void;
   onRemove: (id: string) => void;
   onSave: () => void;
 }) {
   const isOpen = items.length > 0;
+  const isAppend = variant === "append";
 
   // Autocomplete do nome do board.
   const [suggestOpen, setSuggestOpen] = useState(false);
@@ -141,17 +148,22 @@ export function BoardPanel({
                 color: "textPrimary",
               })}
             >
-              Board
+              {isAppend ? "Adicionar" : "Board"}
             </h2>
             <span className={css({ fontFamily: "body", fontSize: "xs", color: "gray.11" })}>
-              {visible.length} {visible.length === 1 ? "imagem" : "imagens"}
+              {isAppend
+                ? `${visible.length} ${visible.length === 1 ? "escolhida" : "escolhidas"}`
+                : `${visible.length} ${visible.length === 1 ? "imagem" : "imagens"}`}
             </span>
           </div>
 
           <div className={css({ display: "flex", alignItems: "center", gap: "2" })}>
+            {!isAppend && (
             <label htmlFor="board-name" className={css({ srOnly: true })}>
               Nome do board
             </label>
+            )}
+            {!isAppend && (
             <div
               className={css({ position: "relative", w: { base: "full", sm: "260px" } })}
             >
@@ -251,6 +263,7 @@ export function BoardPanel({
                 </ul>
               )}
             </div>
+            )}
             <button
               type="button"
               disabled={visible.length === 0 || saving}
@@ -277,7 +290,13 @@ export function BoardPanel({
                 },
               })}
             >
-              {saving ? "Salvando" : "Salvar"}
+              {saving
+                ? isAppend
+                  ? "Adicionando"
+                  : "Salvando"
+                : isAppend
+                  ? `Adicionar +${visible.length}`
+                  : "Salvar"}
             </button>
           </div>
         </div>

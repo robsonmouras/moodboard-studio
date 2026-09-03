@@ -2,9 +2,11 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { X } from "@phosphor-icons/react";
 import { css } from "styled-system/css";
 import { BoardPanel } from "@/components/BoardPanel";
 import { BrandHeadline } from "@/components/BrandHeadline";
+import { iconDefaults } from "@/components/Icon";
 import { Navbar } from "@/components/Navbar";
 import { RecentBoards } from "@/components/RecentBoards";
 import { ResultsGrid, type SearchStatus } from "@/components/ResultsGrid";
@@ -12,6 +14,19 @@ import { SearchField } from "@/components/SearchField";
 import { SearchSuggestions } from "@/components/SearchSuggestions";
 import { useDebouncedValue } from "@/lib/use-debounced-value";
 import type { BoardItem, BoardSummary, SearchApiResponse, SearchImage } from "@/types";
+
+/**
+ * Board de destino do "modo contextual de adição" — o usuário chegou aqui de
+ * `/favoritos/[id]` pelo botão "Adicionar inspirações", e o que favoritar vai
+ * direto pra este board. `itemIds` são as imagens que já estavam no board na
+ * entrada: servem pra marcar o coração como cheio e pra não recontar o que já
+ * estava lá no toast de volta.
+ */
+type ActiveBoard = {
+  id: string;
+  name: string;
+  itemIds: { unsplashId: string; imageId: string }[];
+};
 
 /** Uma imagem favoritada na busca vira `BoardItem` (ainda em memória, antes de salvar). */
 function toBoardItem(image: SearchImage): BoardItem {
@@ -120,16 +135,23 @@ function deriveSearchState(
  * - o board em construção (favoritos ainda não salvos + nome digitado) fica no
  *   `localStorage`, então sair pra `/favoritos` e voltar não perde o trabalho.
  *
+ * `activeBoard` (vindo de `?add=<id>`) liga o **modo contextual**: some a bottom
+ * bar de montar board, entra um badge fixo "Adicionando a X", e favoritar grava
+ * direto naquele board (sem modal de nomear, sem checagem de nome — o destino já
+ * é explícito). Sair do modo (o "x" do badge) não descarta o que já foi salvo.
+ *
  * O acesso a esta tela é protegido pelo middleware de sessão (Fase 3).
  */
 export function SearchWorkspace({
   recentBoards,
   totalBoardCount,
   existingBoards,
+  activeBoard = null,
 }: {
   recentBoards: BoardSummary[];
   totalBoardCount: number;
   existingBoards: ExistingBoard[];
+  activeBoard?: ActiveBoard | null;
 }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
@@ -148,8 +170,38 @@ export function SearchWorkspace({
   // forma síncrona, só dentro dos callbacks async do fetch.
   const [outcome, setOutcome] = useState<SearchOutcome | null>(null);
 
+  // --- Modo contextual de adição (`?add=<id>`) -----------------------------
+  // Staging das inspirações escolhidas pra somar no board de destino. Favoritar
+  // aqui NÃO grava — acumula (o usuário vai clicando corações, a barra conta) e
+  // um clique só em "Adicionar +N" faz o append em lote no board.
+  const [staged, setStaged] = useState<BoardItem[]>([]);
+  const [addingToBoard, setAddingToBoard] = useState(false);
+  // Board de destino atual — pra zerar o staging quando o modo desliga/troca de
+  // board sem que o componente remonte (`/` ↔ `/?add=`).
+  const [ctxBoardId, setCtxBoardId] = useState<string | null>(activeBoard?.id ?? null);
+  if ((activeBoard?.id ?? null) !== ctxBoardId) {
+    setCtxBoardId(activeBoard?.id ?? null);
+    setStaged([]);
+    setAddingToBoard(false);
+  }
+  // Unsplash ids que já estão no board de destino — coração cheio + clique
+  // ignorado (não deixa somar a mesma foto duas vezes).
+  const boardImageIds = useMemo(
+    () => new Set(activeBoard?.itemIds.map((item) => item.unsplashId) ?? []),
+    [activeBoard],
+  );
+
   const debouncedQuery = useDebouncedValue(query.trim(), 400);
-  const favoriteIds = useMemo(() => new Set(board.map((item) => item.id)), [board]);
+  const favoriteIds = useMemo(
+    () =>
+      activeBoard
+        ? new Set([...boardImageIds, ...staged.map((item) => item.id)])
+        : new Set(board.map((item) => item.id)),
+    [activeBoard, boardImageIds, staged, board],
+  );
+  // Bottom bar na tela? (board em construção no fluxo normal, escolhas pendentes
+  // no modo contextual) — dirige o respiro no rodapé e a altura do toast.
+  const panelOpen = activeBoard ? staged.length > 0 : board.length > 0;
 
   // Sugestões de autocomplete pro campo "Nome do board": boards já salvos cujo
   // nome CONTÉM o que foi digitado (ex.: "veloz" → "Board moto veloz"). Some
@@ -234,11 +286,83 @@ export function SearchWorkspace({
   }
 
   function toggleFavorite(image: SearchImage) {
+    if (activeBoard) {
+      // Já está no board de destino: coração fica cheio, clique não faz nada.
+      if (boardImageIds.has(image.id)) return;
+      setStaged((current) =>
+        current.some((item) => item.id === image.id)
+          ? current.filter((item) => item.id !== image.id)
+          : [...current, toBoardItem(image)],
+      );
+      return;
+    }
     setBoard((current) =>
       current.some((item) => item.id === image.id)
         ? current.filter((item) => item.id !== image.id)
         : [...current, toBoardItem(image)],
     );
+  }
+
+  /**
+   * "Adicionar +N": soma as inspirações escolhidas no board de destino, num
+   * append em lote (`POST /api/boards` com `boardId`, a mesma rota do merge por
+   * nome), e volta pro board com a contagem pro toast de lá.
+   */
+  async function addStagedToBoard() {
+    if (!activeBoard || staged.length === 0 || addingToBoard) return;
+    const count = staged.length;
+    setAddingToBoard(true);
+    try {
+      const response = await fetch("/api/boards", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          boardId: activeBoard.id,
+          items: staged.map((item) => ({
+            unsplashId: item.unsplashId,
+            imageUrl: item.imageUrl,
+            thumbUrl: item.thumbUrl,
+            author: item.author,
+            description: item.description,
+          })),
+        }),
+      });
+      if (!response.ok) {
+        flashToast(
+          response.status === 404
+            ? "Esse board não existe mais."
+            : "Não deu pra adicionar agora. Tenta de novo.",
+        );
+        return;
+      }
+      setStaged([]);
+      router.push(`/favoritos/${activeBoard.id}?adicionadas=${count}`);
+    } catch {
+      flashToast("Falha de conexão. Tenta de novo.");
+    } finally {
+      setAddingToBoard(false);
+    }
+  }
+
+  /** Sai do modo contextual (descarta o staging ainda não somado, sem aviso). */
+  function exitContextMode() {
+    setStaged([]);
+    router.push("/");
+    router.refresh();
+  }
+
+  /** Volta pro board: se há escolhas pendentes, soma antes; senão só navega. */
+  function backToActiveBoard() {
+    if (!activeBoard) return;
+    if (staged.length > 0) {
+      void addStagedToBoard();
+      return;
+    }
+    router.push(`/favoritos/${activeBoard.id}`);
+  }
+
+  function removeFromStaged(id: string) {
+    setStaged((current) => current.filter((item) => item.id !== id));
   }
 
   function removeFromBoard(id: string) {
@@ -310,10 +434,124 @@ export function SearchWorkspace({
         bg: "page",
         display: "flex",
         flexDir: "column",
-        overflowX: "hidden",
+        // `clip` e não `hidden`: corta o transbordo horizontal sem virar um
+        // container de scroll — se fosse `hidden`, o badge `position: sticky`
+        // abaixo passaria a "colar" nesse div (que não rola) em vez de na viewport.
+        overflowX: "clip",
       })}
     >
       <Navbar />
+
+      {/* Modo contextual: badge fixo com o board de destino, "Voltar ao board" e
+          um "x" pra sair do modo (sem descartar o que já foi salvo). */}
+      {activeBoard && (
+        <div
+          className={css({
+            position: "sticky",
+            top: "0",
+            zIndex: "banner",
+            bg: "brand.2",
+            borderBottomWidth: "1px",
+            borderBottomStyle: "solid",
+            borderBottomColor: "brand.5",
+          })}
+        >
+          <div
+            className={css({
+              w: "full",
+              maxW: "1120px",
+              mx: "auto",
+              px: { base: "5", md: "8" },
+              py: "2.5",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: "3",
+              flexWrap: "wrap",
+            })}
+          >
+            <button
+              type="button"
+              onClick={backToActiveBoard}
+              className={css({
+                minW: "0",
+                textAlign: "left",
+                border: "none",
+                bg: "transparent",
+                cursor: "pointer",
+                fontFamily: "body",
+                fontSize: "sm",
+                color: "brand.11",
+                _focusVisible: {
+                  outline: "2px solid",
+                  outlineColor: "ctaPurple",
+                  outlineOffset: "2px",
+                },
+              })}
+            >
+              Adicionando a{" "}
+              <strong className={css({ fontWeight: "semibold", color: "brand.12" })}>
+                {activeBoard.name}
+              </strong>
+            </button>
+
+            <div className={css({ display: "flex", alignItems: "center", gap: "1" })}>
+              <button
+                type="button"
+                onClick={backToActiveBoard}
+                className={css({
+                  h: "32px",
+                  px: "3.5",
+                  rounded: "full",
+                  borderWidth: "1px",
+                  borderStyle: "solid",
+                  borderColor: "brand.5",
+                  bg: "surface",
+                  cursor: "pointer",
+                  fontFamily: "body",
+                  fontSize: "sm",
+                  color: "brand.11",
+                  transition: "background-color 0.15s ease",
+                  _hover: { bg: "brand.3" },
+                  _focusVisible: {
+                    outline: "2px solid",
+                    outlineColor: "ctaPurple",
+                    outlineOffset: "2px",
+                  },
+                })}
+              >
+                Voltar ao board
+              </button>
+              <button
+                type="button"
+                onClick={exitContextMode}
+                aria-label="Sair do modo de adição"
+                className={css({
+                  flexShrink: "0",
+                  display: "grid",
+                  placeItems: "center",
+                  w: "32px",
+                  h: "32px",
+                  rounded: "full",
+                  border: "none",
+                  cursor: "pointer",
+                  bg: "transparent",
+                  color: "brand.11",
+                  transition: "background-color 0.15s ease",
+                  _hover: { bg: "brand.3" },
+                  _focusVisible: {
+                    outline: "2px solid",
+                    outlineColor: "ctaPurple",
+                    outlineOffset: "2px",
+                  },
+                })}
+              >
+                <X {...iconDefaults} size={16} aria-hidden />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <main
         className={css({
@@ -324,7 +562,7 @@ export function SearchWorkspace({
           px: { base: "5", md: "8" },
           // Espaço extra no rodapé enquanto a bottom bar do board está na tela,
           // pra ela não cobrir os últimos resultados.
-          pb: board.length > 0 ? { base: "40", md: "44" } : { base: "10", md: "16" },
+          pb: panelOpen ? { base: "40", md: "44" } : { base: "10", md: "16" },
           display: "flex",
           flexDir: "column",
         })}
@@ -385,16 +623,28 @@ export function SearchWorkspace({
         )}
       </main>
 
-      {/* Bottom bar do board: presa ao rodapé, entra/sai conforme houver favoritos. */}
-      <BoardPanel
-        name={boardName}
-        items={board}
-        saving={saving}
-        nameSuggestions={nameSuggestions}
-        onNameChange={setBoardName}
-        onRemove={removeFromBoard}
-        onSave={requestSave}
-      />
+      {/* Bottom bar: no fluxo normal monta um board novo; no modo contextual
+          (`variant="append"`) conta as escolhidas e soma tudo no board de
+          destino de uma vez ("Adicionar +N"). */}
+      {activeBoard ? (
+        <BoardPanel
+          variant="append"
+          items={staged}
+          saving={addingToBoard}
+          onRemove={removeFromStaged}
+          onSave={addStagedToBoard}
+        />
+      ) : (
+        <BoardPanel
+          name={boardName}
+          items={board}
+          saving={saving}
+          nameSuggestions={nameSuggestions}
+          onNameChange={setBoardName}
+          onRemove={removeFromBoard}
+          onSave={requestSave}
+        />
+      )}
 
       <div
         aria-live="polite"
@@ -402,7 +652,7 @@ export function SearchWorkspace({
           position: "fixed",
           left: "50%",
           // Sobe acima da bottom bar do board quando ela está na tela.
-          bottom: board.length > 0 ? "6rem" : "6",
+          bottom: panelOpen ? "6rem" : "6",
           zIndex: "toast",
           transform: "translateX(-50%)",
           pointerEvents: "none",

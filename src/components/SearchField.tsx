@@ -1,7 +1,7 @@
 "use client";
 
 import { type FormEvent } from "react";
-import { MagnifyingGlass } from "@phosphor-icons/react";
+import { MagnifyingGlass, X } from "@phosphor-icons/react";
 import { css } from "styled-system/css";
 import { iconDefaults } from "@/components/Icon";
 
@@ -71,6 +71,34 @@ export function SearchField({
           _focusVisible: { outline: "none" },
         })}
       />
+      {value.length > 0 && (
+        <button
+          type="button"
+          onClick={() => onSearch("")}
+          aria-label="Limpar busca"
+          className={css({
+            flexShrink: "0",
+            display: "grid",
+            placeItems: "center",
+            w: "28px",
+            h: "28px",
+            rounded: "full",
+            border: "none",
+            cursor: "pointer",
+            bg: "transparent",
+            color: "gray.11",
+            transition: "background-color 0.15s ease, color 0.15s ease",
+            _hover: { bg: "gray.3", color: "gray.12" },
+            _focusVisible: {
+              outline: "2px solid",
+              outlineColor: "ctaPurple",
+              outlineOffset: "2px",
+            },
+          })}
+        >
+          <X {...iconDefaults} size={16} aria-hidden />
+        </button>
+      )}
       <button
         type="submit"
         className={css({
