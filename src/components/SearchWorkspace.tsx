@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { css } from "styled-system/css";
 import { BoardPanel } from "@/components/BoardPanel";
 import { BrandHeadline } from "@/components/BrandHeadline";
@@ -23,6 +24,50 @@ function toBoardItem(image: SearchImage): BoardItem {
     imageUrl: image.imageUrl,
     thumbUrl: image.thumbUrl,
   };
+}
+
+/** Board pré-existente do usuário, na forma enxuta usada pra casar o nome digitado. */
+type ExistingBoard = { id: string; name: string };
+
+/**
+ * Normaliza um nome de board pra comparação: sem espaço nas pontas, espaços
+ * internos colapsados e caixa neutra. "  Minimalismo " e "minimalismo" batem.
+ */
+function normalizeName(name: string): string {
+  return name.trim().replace(/\s+/g, " ").toLocaleLowerCase("pt-BR");
+}
+
+/** Rascunho do board em construção, guardado no `localStorage` até salvar. */
+const DRAFT_KEY = "moodboard:draft-board";
+type DraftBoard = { name: string; items: BoardItem[] };
+
+function readDraft(): DraftBoard | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(DRAFT_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<DraftBoard>;
+    if (!parsed || !Array.isArray(parsed.items)) return null;
+    return {
+      name: typeof parsed.name === "string" ? parsed.name : "",
+      items: parsed.items as BoardItem[],
+    };
+  } catch {
+    return null;
+  }
+}
+
+function writeDraft(draft: DraftBoard) {
+  if (typeof window === "undefined") return;
+  try {
+    if (draft.items.length === 0) {
+      window.localStorage.removeItem(DRAFT_KEY);
+    } else {
+      window.localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+    }
+  } catch {
+    // localStorage indisponível (aba anônima, cota cheia) — segue sem persistir.
+  }
 }
 
 /** Desfecho da última busca concluída, marcado com o termo a que pertence. */
@@ -69,22 +114,34 @@ function deriveSearchState(
  * - "Salvar" grava o board no Supabase (`POST /api/boards`) — cria a linha em
  *   `boards` (com slug público) e uma em `board_images` por item — e só então o
  *   toast "Salvo." aparece. Salvo, o board limpa pra começar outro.
+ * - se o nome digitado bater (ignorando caixa/espaço) com um board que já existe,
+ *   antes de salvar aparece um aviso oferecendo somar as imagens naquele board
+ *   em vez de criar um segundo board com o mesmo nome;
+ * - o board em construção (favoritos ainda não salvos + nome digitado) fica no
+ *   `localStorage`, então sair pra `/favoritos` e voltar não perde o trabalho.
  *
  * O acesso a esta tela é protegido pelo middleware de sessão (Fase 3).
  */
 export function SearchWorkspace({
   recentBoards,
   totalBoardCount,
+  existingBoards,
 }: {
   recentBoards: BoardSummary[];
   totalBoardCount: number;
+  existingBoards: ExistingBoard[];
 }) {
+  const router = useRouter();
   const [query, setQuery] = useState("");
   const [board, setBoard] = useState<BoardItem[]>([]);
   const [boardName, setBoardName] = useState("");
   const [toast, setToast] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  // Board existente cujo nome bate com o digitado — dispara o aviso "somar ou criar novo?".
+  const [nameClash, setNameClash] = useState<ExistingBoard | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Só passa a persistir o rascunho depois de tentar restaurar o que havia.
+  const draftHydrated = useRef(false);
 
   // Só guarda o desfecho da última busca concluída (com o termo a que ele pertence).
   // `status` e `results` são derivados disso — assim o efeito nunca chama setState de
@@ -93,6 +150,26 @@ export function SearchWorkspace({
 
   const debouncedQuery = useDebouncedValue(query.trim(), 400);
   const favoriteIds = useMemo(() => new Set(board.map((item) => item.id)), [board]);
+
+  // Sugestões de autocomplete pro campo "Nome do board": boards já salvos cujo
+  // nome CONTÉM o que foi digitado (ex.: "veloz" → "Board moto veloz"). Some
+  // quando o texto casa exatamente com um board — aí o próprio "Salvar" já
+  // oferece somar nele.
+  const nameSuggestions = useMemo(() => {
+    const typed = normalizeName(boardName);
+    if (!typed) return [];
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const candidate of existingBoards) {
+      const normalized = normalizeName(candidate.name);
+      if (normalized === typed || !normalized.includes(typed)) continue;
+      if (seen.has(normalized)) continue;
+      seen.add(normalized);
+      out.push(candidate.name);
+      if (out.length === 6) break;
+    }
+    return out;
+  }, [boardName, existingBoards]);
   const hasSearched = query.trim().length > 0;
   // Faixa de boards recentes só no estado inicial e só se o usuário já tem boards.
   const showRecent = !hasSearched && recentBoards.length > 0;
@@ -104,6 +181,28 @@ export function SearchWorkspace({
       if (toastTimer.current) clearTimeout(toastTimer.current);
     };
   }, []);
+
+  // Restaura o rascunho do board (favoritos + nome) salvo no `localStorage` numa
+  // visita anterior. Roda uma vez, depois da montagem (o HTML do servidor nunca
+  // tem rascunho — restaurar num microtask evita descasar com ele).
+  useEffect(() => {
+    const draft = readDraft();
+    queueMicrotask(() => {
+      if (draft && draft.items.length > 0) {
+        setBoard((current) => (current.length > 0 ? current : draft.items));
+        setBoardName((current) => current || draft.name);
+      }
+      draftHydrated.current = true;
+    });
+  }, []);
+
+  // Persiste o rascunho a cada mudança (só depois da tentativa de restauração,
+  // pra não sobrescrever com o estado vazio inicial). Ao salvar, `board` esvazia
+  // e isso limpa a chave.
+  useEffect(() => {
+    if (!draftHydrated.current) return;
+    writeDraft({ name: boardName, items: board });
+  }, [board, boardName]);
 
   // Busca real na Unsplash: dispara quando o termo (já com debounce) muda; aborta a
   // requisição anterior se o usuário continuar digitando.
@@ -146,8 +245,27 @@ export function SearchWorkspace({
     setBoard((current) => current.filter((item) => item.id !== id));
   }
 
-  async function saveBoard() {
+  /**
+   * "Salvar" no `BoardPanel`. Se o nome digitado casa com um board que já existe,
+   * abre o aviso "somar ou criar novo?" em vez de salvar direto; senão, cria.
+   */
+  function requestSave() {
     if (board.length === 0 || saving) return;
+    const typed = normalizeName(boardName);
+    const match = typed
+      ? existingBoards.find((candidate) => normalizeName(candidate.name) === typed)
+      : undefined;
+    if (match) {
+      setNameClash(match);
+      return;
+    }
+    void saveBoard(null);
+  }
+
+  /** Grava o board: cria um novo, ou (se `mergeInto`) soma as imagens num existente. */
+  async function saveBoard(mergeInto: ExistingBoard | null) {
+    if (board.length === 0 || saving) return;
+    setNameClash(null);
     setSaving(true);
     try {
       const response = await fetch("/api/boards", {
@@ -156,6 +274,7 @@ export function SearchWorkspace({
         body: JSON.stringify({
           title: boardName.trim(),
           searchTerm: query.trim() || null,
+          boardId: mergeInto?.id,
           items: board.map((item) => ({
             unsplashId: item.unsplashId,
             imageUrl: item.imageUrl,
@@ -171,9 +290,12 @@ export function SearchWorkspace({
         return;
       }
 
-      flashToast("Salvo.");
+      flashToast(mergeInto ? `Adicionado a “${mergeInto.name}”.` : "Salvo.");
       setBoard([]);
       setBoardName("");
+      // Atualiza os boards recentes e a lista usada pra casar nomes — assim um
+      // segundo "Salvar" na mesma sessão já enxerga o board recém-criado.
+      router.refresh();
     } catch {
       flashToast("Falha de conexão. Tenta de novo.");
     } finally {
@@ -268,9 +390,10 @@ export function SearchWorkspace({
         name={boardName}
         items={board}
         saving={saving}
+        nameSuggestions={nameSuggestions}
         onNameChange={setBoardName}
         onRemove={removeFromBoard}
-        onSave={saveBoard}
+        onSave={requestSave}
       />
 
       <div
@@ -303,6 +426,116 @@ export function SearchWorkspace({
           </span>
         )}
       </div>
+
+      {/* Nome digitado bate com um board que já existe: somar nele ou criar outro? */}
+      {nameClash && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Já existe um board com esse nome"
+          className={css({
+            position: "fixed",
+            inset: "0",
+            zIndex: "modal",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            p: "5",
+            bg: "black.a7",
+          })}
+          onClick={() => !saving && setNameClash(null)}
+        >
+          <div
+            onClick={(event) => event.stopPropagation()}
+            className={css({
+              w: "full",
+              maxW: "400px",
+              display: "flex",
+              flexDir: "column",
+              gap: "4",
+              bg: "surface",
+              borderWidth: "1px",
+              borderStyle: "solid",
+              borderColor: "border",
+              rounded: "2xl",
+              boxShadow: "xl",
+              p: "6",
+            })}
+          >
+            <div className={css({ display: "flex", flexDir: "column", gap: "1.5" })}>
+              <p
+                className={css({
+                  fontFamily: "display",
+                  fontWeight: "400",
+                  fontSize: "lg",
+                  color: "textPrimary",
+                })}
+              >
+                Já existe um board “{nameClash.name}”
+              </p>
+              <p className={css({ fontFamily: "body", fontSize: "sm", color: "gray.11" })}>
+                Adicionar {board.length} {board.length === 1 ? "imagem" : "imagens"} a esse
+                board, ou criar um board novo com o mesmo nome?
+              </p>
+            </div>
+            <div className={css({ display: "flex", flexDir: "column", gap: "2" })}>
+              <button
+                type="button"
+                disabled={saving}
+                onClick={() => void saveBoard(nameClash)}
+                className={css({
+                  h: "44px",
+                  px: "5",
+                  rounded: "full",
+                  border: "none",
+                  cursor: "pointer",
+                  bg: "ctaPurple",
+                  color: "white",
+                  fontFamily: "body",
+                  fontWeight: "semibold",
+                  fontSize: "sm",
+                  _hover: { bg: "brand.10" },
+                  _disabled: { opacity: 0.5, cursor: "not-allowed" },
+                  _focusVisible: {
+                    outline: "2px solid",
+                    outlineColor: "ctaPurple",
+                    outlineOffset: "2px",
+                  },
+                })}
+              >
+                Adicionar ao board existente
+              </button>
+              <button
+                type="button"
+                disabled={saving}
+                onClick={() => void saveBoard(null)}
+                className={css({
+                  h: "44px",
+                  px: "5",
+                  rounded: "full",
+                  borderWidth: "1px",
+                  borderStyle: "solid",
+                  borderColor: "gray.6",
+                  cursor: "pointer",
+                  bg: "surface",
+                  color: "textPrimary",
+                  fontFamily: "body",
+                  fontSize: "sm",
+                  _hover: { bg: "gray.2" },
+                  _disabled: { opacity: 0.5, cursor: "not-allowed" },
+                  _focusVisible: {
+                    outline: "2px solid",
+                    outlineColor: "ctaPurple",
+                    outlineOffset: "2px",
+                  },
+                })}
+              >
+                Criar um board novo mesmo assim
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

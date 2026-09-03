@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { type KeyboardEvent, useState } from "react";
 import { X } from "@phosphor-icons/react";
 import { css } from "styled-system/css";
 import { ImageTile } from "@/components/ImageTile";
@@ -15,11 +15,16 @@ import type { BoardItem } from "@/types";
  *
  * Fase 3: "Salvar" grava o board no Supabase (a chamada vive no `SearchWorkspace`);
  * `saving` desabilita o botão enquanto a gravação está em voo.
+ *
+ * O campo de nome tem autocomplete: `nameSuggestions` traz os boards já salvos
+ * cujo nome contém o que foi digitado (calculado no `SearchWorkspace`). Escolher
+ * uma sugestão só preenche o campo — o "Salvar" ainda confirma somar no board.
  */
 export function BoardPanel({
   name,
   items,
   saving = false,
+  nameSuggestions = [],
   onNameChange,
   onRemove,
   onSave,
@@ -27,11 +32,47 @@ export function BoardPanel({
   name: string;
   items: BoardItem[];
   saving?: boolean;
+  nameSuggestions?: string[];
   onNameChange: (name: string) => void;
   onRemove: (id: string) => void;
   onSave: () => void;
 }) {
   const isOpen = items.length > 0;
+
+  // Autocomplete do nome do board.
+  const [suggestOpen, setSuggestOpen] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(-1);
+  const showSuggestions = suggestOpen && nameSuggestions.length > 0;
+
+  function pickSuggestion(value: string) {
+    onNameChange(value);
+    setSuggestOpen(false);
+    setActiveIndex(-1);
+  }
+
+  function handleNameKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (!showSuggestions) {
+      if (event.key === "Enter") onSave();
+      return;
+    }
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setActiveIndex((i) => (i + 1) % nameSuggestions.length);
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setActiveIndex((i) => (i <= 0 ? nameSuggestions.length - 1 : i - 1));
+    } else if (event.key === "Enter") {
+      event.preventDefault();
+      if (activeIndex >= 0) pickSuggestion(nameSuggestions[activeIndex]);
+      else {
+        setSuggestOpen(false);
+        onSave();
+      }
+    } else if (event.key === "Escape") {
+      setSuggestOpen(false);
+      setActiveIndex(-1);
+    }
+  }
 
   // Mantém os últimos favoritos renderizados durante a animação de saída — quando
   // `items` já esvaziou mas a barra ainda está deslizando para fora da tela.
@@ -111,28 +152,105 @@ export function BoardPanel({
             <label htmlFor="board-name" className={css({ srOnly: true })}>
               Nome do board
             </label>
-            <input
-              id="board-name"
-              type="text"
-              placeholder="Nome do board"
-              value={name}
-              onChange={(event) => onNameChange(event.target.value)}
-              className={css({
-                w: { base: "full", sm: "260px" },
-                h: "40px",
-                px: "3.5",
-                rounded: "full",
-                borderWidth: "1px",
-                borderStyle: "solid",
-                borderColor: "gray.6",
-                bg: "page",
-                fontFamily: "body",
-                fontSize: "sm",
-                color: "textPrimary",
-                _placeholder: { color: "gray.9" },
-                _focusVisible: { outline: "none", borderColor: "gray.9" },
-              })}
-            />
+            <div
+              className={css({ position: "relative", w: { base: "full", sm: "260px" } })}
+            >
+              <input
+                id="board-name"
+                type="text"
+                placeholder="Nome do board"
+                autoComplete="off"
+                role="combobox"
+                aria-expanded={showSuggestions}
+                aria-controls="board-name-suggestions"
+                aria-autocomplete="list"
+                value={name}
+                onChange={(event) => {
+                  onNameChange(event.target.value);
+                  setSuggestOpen(true);
+                  setActiveIndex(-1);
+                }}
+                onFocus={() => setSuggestOpen(true)}
+                onBlur={() => setSuggestOpen(false)}
+                onKeyDown={handleNameKeyDown}
+                className={css({
+                  w: "full",
+                  h: "40px",
+                  px: "3.5",
+                  rounded: "full",
+                  borderWidth: "1px",
+                  borderStyle: "solid",
+                  borderColor: "gray.6",
+                  bg: "page",
+                  fontFamily: "body",
+                  fontSize: "sm",
+                  color: "textPrimary",
+                  _placeholder: { color: "gray.9" },
+                  _focusVisible: { outline: "none", borderColor: "gray.9" },
+                })}
+              />
+
+              {showSuggestions && (
+                <ul
+                  id="board-name-suggestions"
+                  role="listbox"
+                  aria-label="Boards salvos com esse nome"
+                  className={css({
+                    listStyle: "none",
+                    position: "absolute",
+                    left: "0",
+                    right: "0",
+                    bottom: "calc(100% + 6px)",
+                    zIndex: "dropdown",
+                    maxH: "196px",
+                    overflowY: "auto",
+                    bg: "surface",
+                    borderWidth: "1px",
+                    borderStyle: "solid",
+                    borderColor: "border",
+                    rounded: "xl",
+                    boxShadow: "lg",
+                    p: "1",
+                  })}
+                >
+                  {nameSuggestions.map((suggestion, index) => (
+                    <li key={suggestion} role="presentation">
+                      <button
+                        type="button"
+                        role="option"
+                        aria-selected={index === activeIndex}
+                        // `onMouseDown` (não `onClick`): roda antes do `blur` do
+                        // input, então a sugestão é escolhida sem a lista fechar antes.
+                        onMouseDown={(event) => {
+                          event.preventDefault();
+                          pickSuggestion(suggestion);
+                        }}
+                        onMouseEnter={() => setActiveIndex(index)}
+                        className={css({
+                          display: "block",
+                          w: "full",
+                          textAlign: "left",
+                          px: "3",
+                          py: "2",
+                          rounded: "lg",
+                          border: "none",
+                          cursor: "pointer",
+                          bg: index === activeIndex ? "gray.3" : "transparent",
+                          color: "textPrimary",
+                          fontFamily: "body",
+                          fontSize: "sm",
+                          whiteSpace: "nowrap",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                        })}
+                      >
+                        Somar em <strong className={css({ fontWeight: "semibold" })}>{suggestion}</strong>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
             <button
               type="button"
               disabled={visible.length === 0 || saving}

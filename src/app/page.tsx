@@ -22,6 +22,12 @@ export const dynamic = "force-dynamic";
 export default async function Home() {
   const boards = await listBoards();
   return (
-    <SearchWorkspace recentBoards={boards.slice(0, 3)} totalBoardCount={boards.length} />
+    <SearchWorkspace
+      recentBoards={boards.slice(0, 3)}
+      totalBoardCount={boards.length}
+      // Lista enxuta (id + nome) pra checar, na hora de salvar, se o nome digitado
+      // bate com um board que já existe — e oferecer somar nele em vez de duplicar.
+      existingBoards={boards.map((board) => ({ id: board.id, name: board.name }))}
+    />
   );
 }

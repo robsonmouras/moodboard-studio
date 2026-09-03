@@ -9,6 +9,11 @@ import { createClient } from "@/lib/supabase/server";
  * board, o termo buscado e os itens favoritados. Aqui: valida a sessão, gera o
  * slug público, cria a linha em `boards` e uma linha em `board_images` por item.
  * A RLS por `user_id` faz o resto — nada é gravado sem sessão.
+ *
+ * Se o corpo trouxer `boardId`, o fluxo é outro: em vez de criar um board novo,
+ * as imagens são anexadas a um board que já existe (checagem de nome no client —
+ * "já existe um board chamado X, adicionar a ele?"). A RLS garante que só dá pra
+ * anexar num board do próprio usuário.
  */
 
 const SLUG_LEN = 10;
@@ -26,6 +31,8 @@ interface IncomingBody {
   title?: string;
   searchTerm?: string | null;
   items?: IncomingItem[];
+  /** Quando presente, anexa os itens a este board em vez de criar um novo. */
+  boardId?: string;
 }
 
 function isItem(value: unknown): value is IncomingItem {
@@ -66,8 +73,52 @@ export async function POST(request: Request) {
   const searchTerm = body.searchTerm?.trim() || null;
   const title = body.title?.trim() || searchTerm || "Board sem nome";
 
-  // Cria o board com slug único — a constraint `unique` da tabela é a fonte da
-  // verdade; em colisão (raríssima) gera outro slug e tenta de novo.
+  // --- Anexar a um board existente (fluxo "adicionar ao board 'X'") ---------
+  const targetId = typeof body.boardId === "string" ? body.boardId.trim() : "";
+  if (targetId) {
+    // Confere que o board é do usuário (a RLS já filtra por `user_id`; um id de
+    // outra pessoa ou inexistente volta vazio) e pega a próxima posição livre.
+    const { data: target, error: targetError } = await supabase
+      .from("boards")
+      .select("slug, board_images(sort_order)")
+      .eq("id", targetId)
+      .maybeSingle();
+
+    if (targetError) {
+      if (targetError.code === "22P02") {
+        return NextResponse.json({ ok: false, error: "board_not_found" }, { status: 404 });
+      }
+      return NextResponse.json({ ok: false, error: "insert_failed" }, { status: 500 });
+    }
+    if (!target) {
+      return NextResponse.json({ ok: false, error: "board_not_found" }, { status: 404 });
+    }
+
+    const nextSort =
+      (target.board_images ?? []).reduce((max, img) => Math.max(max, img.sort_order), -1) + 1;
+
+    const { error: appendError } = await supabase.from("board_images").insert(
+      items.map((item, index) => ({
+        board_id: targetId,
+        unsplash_id: item.unsplashId,
+        image_url: item.imageUrl,
+        thumb_url: item.thumbUrl,
+        author: item.author,
+        description: item.description,
+        sort_order: nextSort + index,
+      })),
+    );
+
+    if (appendError) {
+      return NextResponse.json({ ok: false, error: "insert_failed" }, { status: 500 });
+    }
+
+    return NextResponse.json({ ok: true, slug: target.slug, merged: true });
+  }
+
+  // --- Criar um board novo -------------------------------------------------
+  // Slug único — a constraint `unique` da tabela é a fonte da verdade; em
+  // colisão (raríssima) gera outro slug e tenta de novo.
   let boardId: string | null = null;
   let slug = "";
   for (let attempt = 0; attempt < SLUG_RETRIES; attempt++) {
