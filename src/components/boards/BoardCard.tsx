@@ -124,7 +124,7 @@ export function BoardCard({ board }: { board: BoardSummary }) {
                 bg: "ctaPurple",
                 color: "white",
                 fontFamily: "body",
-                fontWeight: "semibold",
+                fontWeight: "normal",
                 fontSize: "sm",
                 _hover: { bg: "brand.10" },
                 _disabled: { opacity: 0.5, cursor: "not-allowed" },

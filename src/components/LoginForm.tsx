@@ -326,7 +326,7 @@ export function LoginForm() {
               border: "none",
               bg: "ctaPurple",
               color: "white",
-              fontWeight: "semibold",
+              fontWeight: "normal",
               fontSize: "md",
               justifyContent: "space-between",
               pl: "6",

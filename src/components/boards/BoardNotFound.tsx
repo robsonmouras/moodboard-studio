@@ -55,7 +55,7 @@ export function BoardNotFound() {
             bg: "ctaPurple",
             color: "white",
             fontFamily: "body",
-            fontWeight: "semibold",
+            fontWeight: "normal",
             fontSize: "sm",
             transition: "background-color 0.15s ease",
             _hover: { bg: "brand.10" },
