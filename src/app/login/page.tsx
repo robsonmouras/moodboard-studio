@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { css } from "styled-system/css";
+import { BrandHeadline } from "@/components/BrandHeadline";
 import { LoginForm } from "@/components/LoginForm";
 
 /**
@@ -89,50 +90,7 @@ export default function LoginPage() {
               mb: { base: "8", md: "12" },
             })}
           >
-            <h1
-              className={css({
-                m: "0",
-                fontFamily: "serif",
-                fontWeight: "400",
-                fontSize: { base: "5xl", md: "7xl" },
-                lineHeight: "1.08",
-                color: "textPrimary",
-              })}
-            >
-              Encontre, organize,
-              <br />
-              <span
-                className={css({
-                  position: "relative",
-                  display: "inline-block",
-                  whiteSpace: "nowrap",
-                })}
-              >
-                compartilhe
-                <svg
-                  viewBox="0 0 320 110"
-                  fill="none"
-                  aria-hidden="true"
-                  className={css({
-                    position: "absolute",
-                    left: "-6%",
-                    top: "-34%",
-                    w: "112%",
-                    h: "168%",
-                    pointerEvents: "none",
-                    color: "brand.7",
-                  })}
-                >
-                  <path
-                    d="M14,58 C10,26 62,8 158,7 C258,6 306,24 302,56 C298,90 236,102 156,101 C70,100 18,92 14,58 Z"
-                    stroke="currentColor"
-                    strokeWidth="2.5"
-                    strokeLinecap="round"
-                  />
-                </svg>
-              </span>
-              .
-            </h1>
+            <BrandHeadline size="entry" />
 
             <p
               className={css({

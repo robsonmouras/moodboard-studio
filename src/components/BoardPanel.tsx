@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { IconX } from "@tabler/icons-react";
+import { X } from "@phosphor-icons/react";
 import { css } from "styled-system/css";
 import { ImageTile } from "@/components/ImageTile";
 import type { BoardItem } from "@/types";
@@ -206,7 +206,7 @@ export function BoardPanel({
                   },
                 })}
               >
-                <IconX size={14} stroke={1.5} />
+                <X size={14} weight="light" />
               </button>
             </li>
           ))}

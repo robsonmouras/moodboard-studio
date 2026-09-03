@@ -3,12 +3,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { css } from "styled-system/css";
 import { BoardPanel } from "@/components/BoardPanel";
-import { HeroIllustration } from "@/components/HeroIllustration";
+import { BrandHeadline } from "@/components/BrandHeadline";
 import { Navbar } from "@/components/Navbar";
+import { RecentBoards } from "@/components/RecentBoards";
 import { ResultsGrid, type SearchStatus } from "@/components/ResultsGrid";
 import { SearchField } from "@/components/SearchField";
+import { SearchSuggestions } from "@/components/SearchSuggestions";
 import { useDebouncedValue } from "@/lib/use-debounced-value";
-import type { BoardItem, SearchApiResponse, SearchImage } from "@/types";
+import type { BoardItem, BoardSummary, SearchApiResponse, SearchImage } from "@/types";
 
 /** Uma imagem favoritada na busca vira `BoardItem` (ainda em memória, antes de salvar). */
 function toBoardItem(image: SearchImage): BoardItem {
@@ -70,7 +72,13 @@ function deriveSearchState(
  *
  * O acesso a esta tela é protegido pelo middleware de sessão (Fase 3).
  */
-export function SearchWorkspace() {
+export function SearchWorkspace({
+  recentBoards,
+  totalBoardCount,
+}: {
+  recentBoards: BoardSummary[];
+  totalBoardCount: number;
+}) {
   const [query, setQuery] = useState("");
   const [board, setBoard] = useState<BoardItem[]>([]);
   const [boardName, setBoardName] = useState("");
@@ -86,6 +94,8 @@ export function SearchWorkspace() {
   const debouncedQuery = useDebouncedValue(query.trim(), 400);
   const favoriteIds = useMemo(() => new Set(board.map((item) => item.id)), [board]);
   const hasSearched = query.trim().length > 0;
+  // Faixa de boards recentes só no estado inicial e só se o usuário já tem boards.
+  const showRecent = !hasSearched && recentBoards.length > 0;
 
   const { status, results } = deriveSearchState(debouncedQuery, outcome);
 
@@ -197,7 +207,8 @@ export function SearchWorkspace() {
           flexDir: "column",
         })}
       >
-        {/* Hero: no estado inicial fica centralizado vertical e horizontalmente. */}
+        {/* Hero: sem busca e sem boards, fica centralizado vertical. Com boards
+            recentes abaixo, alinha ao topo pra caber a faixa. */}
         <div
           className={css({
             display: "flex",
@@ -207,26 +218,15 @@ export function SearchWorkspace() {
             w: "full",
             maxW: "560px",
             mx: "auto",
-            flex: hasSearched ? undefined : "1",
+            flex: hasSearched || showRecent ? undefined : "1",
             justifyContent: "center",
-            pt: hasSearched ? { base: "4", md: "8" } : "0",
+            pt: hasSearched ? { base: "4", md: "8" } : showRecent ? { base: "8", md: "14" } : "0",
             pb: hasSearched ? "8" : "0",
           })}
         >
-          <h1
-            className={css({
-              fontFamily: "display",
-              fontWeight: "300",
-              fontSize: hasSearched ? { base: "lg", md: "2xl" } : { base: "2xl", md: "4xl" },
-              lineHeight: "1.15",
-              textWrap: "balance",
-              maxW: "full",
-              color: "textPrimary",
-              mb: hasSearched ? "4" : "3",
-            })}
-          >
-            Encontre, organize, compartilhe.
-          </h1>
+          <div className={css({ mb: hasSearched ? "4" : "3" })}>
+            <BrandHeadline size={hasSearched ? "compact" : "hero"} />
+          </div>
 
           {!hasSearched && (
             <p
@@ -242,10 +242,14 @@ export function SearchWorkspace() {
             </p>
           )}
 
-          <SearchField initialQuery={query} onSearch={setQuery} />
+          <SearchField value={query} onSearch={setQuery} />
 
-          {!hasSearched && <HeroIllustration />}
+          {!hasSearched && <SearchSuggestions onPick={setQuery} />}
         </div>
+
+        {showRecent && (
+          <RecentBoards boards={recentBoards} totalCount={totalBoardCount} />
+        )}
 
         {hasSearched && (
           <ResultsGrid

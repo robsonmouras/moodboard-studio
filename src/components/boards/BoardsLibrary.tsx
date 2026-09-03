@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { IconSearch } from "@tabler/icons-react";
+import { MagnifyingGlass } from "@phosphor-icons/react";
 import { css } from "styled-system/css";
 import { BoardCard } from "@/components/boards/BoardCard";
 import { iconDefaults } from "@/components/Icon";
@@ -97,7 +97,7 @@ export function BoardsLibrary({ boards }: { boards: BoardSummary[] }) {
               _focusWithin: { borderColor: "gray.9" },
             })}
           >
-            <IconSearch {...iconDefaults} size={18} aria-hidden />
+            <MagnifyingGlass {...iconDefaults} size={18} aria-hidden />
             <label htmlFor="boards-search" className={css({ srOnly: true })}>
               Buscar nos seus boards
             </label>

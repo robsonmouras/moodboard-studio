@@ -1,12 +1,14 @@
 import type { ComponentType } from "react";
-import type { IconProps } from "@tabler/icons-react";
+import type { IconProps } from "@phosphor-icons/react";
 
 /**
- * Defaults do sistema de ícones da identidade visual:
- * biblioteca Tabler, estilo outline, stroke-width 1 (mais fino que o padrão 2),
- * tamanho base 20px. Ênfase se ganha por tamanho/cor, nunca engrossando o traço.
+ * Sistema de ícones do produto: **Phosphor Icons, peso "light"** — traço fino,
+ * alinhado à identidade serifada/editorial (decisão 07). Ênfase se ganha por
+ * tamanho ou cor, nunca engrossando o traço (pesos "regular"/"bold" ficam de fora).
+ * Estados ativos/selecionados podem usar o peso "fill" do mesmo ícone — ex.: o
+ * coração cheio no card já favoritado (`ResultCard`).
  */
-export const iconDefaults = { stroke: 1, size: 20 } as const;
+export const iconDefaults = { weight: "light", size: 20 } as const;
 
 type IconComponent = ComponentType<IconProps>;
 
@@ -14,6 +16,6 @@ export interface IconProps_ extends IconProps {
   icon: IconComponent;
 }
 
-export function Icon({ icon: TablerIcon, ...props }: IconProps_) {
-  return <TablerIcon {...iconDefaults} {...props} />;
+export function Icon({ icon: PhosphorIcon, ...props }: IconProps_) {
+  return <PhosphorIcon {...iconDefaults} {...props} />;
 }

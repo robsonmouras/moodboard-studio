@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { IconArrowLeft, IconLink, IconTrash, IconX } from "@tabler/icons-react";
+import { ArrowLeft, LinkSimple, Trash, X } from "@phosphor-icons/react";
 import { css } from "styled-system/css";
 import { iconDefaults } from "@/components/Icon";
 import { ImageTile } from "@/components/ImageTile";
@@ -53,7 +53,7 @@ const ctaLink = css({
   _focusVisible: { outline: "2px solid", outlineColor: "ctaPurple", outlineOffset: "2px" },
 });
 
-const headerButton = css({
+const headerButtonBase = {
   display: "inline-flex",
   alignItems: "center",
   gap: "1.5",
@@ -69,10 +69,14 @@ const headerButton = css({
   color: "textPrimary",
   fontFamily: "body",
   fontSize: "sm",
-  transition: "background-color 0.15s ease",
-  _hover: { bg: "gray.2" },
+  transitionProperty: "background-color, color",
+  transitionDuration: "0.15s",
   _focusVisible: { outline: "2px solid", outlineColor: "ctaPurple", outlineOffset: "2px" },
-});
+} as const;
+
+const headerButton = css(headerButtonBase, { _hover: { bg: "gray.2" } });
+// "Excluir board": mesmo botão, mas no hover só o ÍCONE vira vermelho (fundo igual).
+const dangerIconHover = css({ _hover: { "& svg": { color: "red.11" } } });
 
 /**
  * Detalhe de um board (`/favoritos/[id]`).
@@ -178,7 +182,7 @@ export function BoardDetailView({ board }: { board: Board }) {
         })}
       >
         <Link href="/favoritos" className={backLink}>
-          <IconArrowLeft {...iconDefaults} size={16} aria-hidden />
+          <ArrowLeft {...iconDefaults} size={16} aria-hidden />
           Favoritos
         </Link>
 
@@ -232,11 +236,15 @@ export function BoardDetailView({ board }: { board: Board }) {
 
           <div className={css({ display: "flex", alignItems: "center", gap: "2", flexShrink: "0" })}>
             <button type="button" onClick={copyLink} className={headerButton}>
-              <IconLink {...iconDefaults} size={16} aria-hidden />
+              <LinkSimple {...iconDefaults} size={16} aria-hidden />
               Copiar link
             </button>
-            <button type="button" onClick={() => setConfirming(true)} className={headerButton}>
-              <IconTrash {...iconDefaults} size={16} aria-hidden />
+            <button
+              type="button"
+              onClick={() => setConfirming(true)}
+              className={`${headerButton} ${dangerIconHover}`}
+            >
+              <Trash {...iconDefaults} size={16} aria-hidden />
               Excluir board
             </button>
           </div>
@@ -308,7 +316,7 @@ export function BoardDetailView({ board }: { board: Board }) {
                     },
                   })}
                 >
-                  <IconX size={16} stroke={1.5} />
+                  <X {...iconDefaults} size={16} />
                 </button>
                 <figcaption
                   className={css({ mt: "1.5", fontFamily: "body", fontSize: "xs", color: "gray.11" })}

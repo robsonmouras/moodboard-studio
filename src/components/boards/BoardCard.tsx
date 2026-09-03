@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { IconPencil, IconTrash } from "@tabler/icons-react";
+import { PencilSimple, Trash } from "@phosphor-icons/react";
 import { css } from "styled-system/css";
 import { BoardCover } from "@/components/boards/BoardCover";
 import { iconDefaults } from "@/components/Icon";
@@ -195,7 +195,7 @@ export function BoardCard({ board }: { board: BoardSummary }) {
               },
             })}
           >
-            <IconPencil {...iconDefaults} size={15} />
+            <PencilSimple {...iconDefaults} size={15} />
           </Link>
           <button
             type="button"
@@ -213,7 +213,10 @@ export function BoardCard({ board }: { board: BoardSummary }) {
               bg: "surface",
               color: "textPrimary",
               boxShadow: "sm",
-              _hover: { bg: "gray.2" },
+              transitionProperty: "background-color, color",
+              transitionDuration: "0.15s",
+              // Hover: só o ícone vira vermelho (fundo não muda) — sinaliza a ação destrutiva.
+              _hover: { bg: "gray.2", color: "red.11" },
               _focusVisible: {
                 outline: "2px solid",
                 outlineColor: "ctaPurple",
@@ -221,7 +224,7 @@ export function BoardCard({ board }: { board: BoardSummary }) {
               },
             })}
           >
-            <IconTrash {...iconDefaults} size={15} />
+            <Trash {...iconDefaults} size={15} />
           </button>
         </div>
       )}

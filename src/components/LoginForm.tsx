@@ -2,7 +2,7 @@
 
 import { type FormEvent, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { IconEye, IconEyeOff } from "@tabler/icons-react";
+import { Eye, EyeSlash } from "@phosphor-icons/react";
 import { css } from "styled-system/css";
 import { iconDefaults } from "@/components/Icon";
 import { createClient } from "@/lib/supabase/client";
@@ -312,9 +312,9 @@ export function LoginForm() {
               })}
             >
               {senhaVisivel ? (
-                <IconEyeOff {...iconDefaults} size={18} aria-hidden />
+                <EyeSlash {...iconDefaults} size={18} aria-hidden />
               ) : (
-                <IconEye {...iconDefaults} size={18} aria-hidden />
+                <Eye {...iconDefaults} size={18} aria-hidden />
               )}
             </button>
           </div>

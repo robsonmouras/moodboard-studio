@@ -1,28 +1,22 @@
 "use client";
 
-import { type FormEvent, useState } from "react";
-import { IconSearch } from "@tabler/icons-react";
+import { type FormEvent } from "react";
+import { MagnifyingGlass } from "@phosphor-icons/react";
 import { css } from "styled-system/css";
 import { iconDefaults } from "@/components/Icon";
 
 /**
- * Campo de busca por texto livre. Dispara `onSearch` a cada tecla (e no submit, para
- * quem aperta Enter); o `SearchWorkspace` aplica o debounce antes de bater na Unsplash.
+ * Campo de busca por texto livre. Componente controlado: o valor mora no
+ * `SearchWorkspace` (pai), que aplica o debounce antes de bater na Unsplash e
+ * também consegue preencher o campo a partir dos chips de sugestão.
  */
 export function SearchField({
-  initialQuery = "",
+  value,
   onSearch,
 }: {
-  initialQuery?: string;
+  value: string;
   onSearch: (query: string) => void;
 }) {
-  const [value, setValue] = useState(initialQuery);
-
-  function handleChange(next: string) {
-    setValue(next);
-    onSearch(next);
-  }
-
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     onSearch(value);
@@ -49,7 +43,7 @@ export function SearchField({
         _focusWithin: { borderColor: "gray.9" },
       })}
     >
-      <IconSearch {...iconDefaults} aria-hidden />
+      <MagnifyingGlass {...iconDefaults} aria-hidden />
       <label
         htmlFor="search-query"
         className={css({ srOnly: true })}
@@ -63,7 +57,7 @@ export function SearchField({
         autoComplete="off"
         placeholder="Busca um tema do briefing"
         value={value}
-        onChange={(event) => handleChange(event.target.value)}
+        onChange={(event) => onSearch(event.target.value)}
         className={css({
           flex: "1",
           minW: "0",

@@ -20,8 +20,9 @@ const inter = Inter({
   display: "swap",
 });
 
-// Instrument Serif: usada apenas no headline da tela de entrada (/login), conforme
-// decisão de design v3. Só tem peso 400. Conectada ao token de fonte fonts.serif.
+// Instrument Serif: tratamento de headline-assinatura do produto — a frase
+// "Encontre, organize, compartilhe." no /login e na home logada (<BrandHeadline>),
+// decisão 04. Só tem peso 400. Conectada ao token de fonte fonts.serif.
 const instrumentSerif = Instrument_Serif({
   variable: "--font-instrument-serif",
   subsets: ["latin"],
