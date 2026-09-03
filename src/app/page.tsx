@@ -2,11 +2,11 @@ import type { Metadata } from "next";
 import { SearchWorkspace } from "@/components/SearchWorkspace";
 
 /**
- * Home do produto (`/`) — a tela onde a Marina já faz a busca.
+ * Home do produto (`/`) — a tela onde a Marina faz a busca.
  *
- * Fase 1: protótipo navegável com dados mockados (busca → grid → favoritar → montar board),
- * sem backend e sem porta de login. A tela de login segue existindo em código (`/login`),
- * fora deste fluxo, para a Fase 3.
+ * Fase 3: busca real na Unsplash → grid → favoritar → montar board → salvar no
+ * Supabase. Atrás do middleware de sessão (`src/middleware.ts`): sem login,
+ * redireciona pra `/login`.
  *
  * A parte interativa vive em <SearchWorkspace> (client).
  */

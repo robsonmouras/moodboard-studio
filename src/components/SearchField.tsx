@@ -6,8 +6,8 @@ import { css } from "styled-system/css";
 import { iconDefaults } from "@/components/Icon";
 
 /**
- * Campo de busca por texto livre. Na Fase 1 não chama nenhuma API — ao enviar,
- * dispara `onSearch` e o `SearchWorkspace` filtra os dados mockados em memória.
+ * Campo de busca por texto livre. Dispara `onSearch` a cada tecla (e no submit, para
+ * quem aperta Enter); o `SearchWorkspace` aplica o debounce antes de bater na Unsplash.
  */
 export function SearchField({
   initialQuery = "",
@@ -17,6 +17,11 @@ export function SearchField({
   onSearch: (query: string) => void;
 }) {
   const [value, setValue] = useState(initialQuery);
+
+  function handleChange(next: string) {
+    setValue(next);
+    onSearch(next);
+  }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -58,7 +63,7 @@ export function SearchField({
         autoComplete="off"
         placeholder="Busca um tema do briefing"
         value={value}
-        onChange={(event) => setValue(event.target.value)}
+        onChange={(event) => handleChange(event.target.value)}
         className={css({
           flex: "1",
           minW: "0",

@@ -1,52 +1,109 @@
 /**
- * Tipos de domínio do produto — já tipados na Fase 1 (protótipo com dados mockados)
- * para evitar refatoração na Fase 2, quando os dados reais da Unsplash entram no lugar
- * dos mocks. Nada de `any` solto.
+ * Tipos de domínio do produto.
+ *
+ * - Busca (`/`): consome a Unsplash de verdade via a Route Handler `src/app/api/search`.
+ * - Biblioteca de boards (`/favoritos`) e link público (`/b/[slug]`): Postgres/Supabase
+ *   (Fase 3 — ver `src/types/database.ts` para a forma das tabelas).
+ *
+ * Nada de `any` solto — nem na resposta da API, nem no client.
  */
 
 /**
- * Uma imagem de resultado de busca.
- *
- * Na Fase 1 os campos são preenchidos por `src/lib/mock-images.ts`. Na Fase 2 a mesma
- * forma passa a ser montada a partir da resposta real da Unsplash (`urls.regular`,
- * `user.name`, `alt_description` etc.) — por isso os nomes já seguem esse vocabulário.
+ * Uma imagem de resultado de busca — montada a partir da resposta real da Unsplash
+ * (`GET /search/photos`) pela Route Handler `src/app/api/search`. A resposta bruta da
+ * Unsplash nunca chega ao client; só esta forma enxuta.
  */
 export interface SearchImage {
-  /** Identificador estável do resultado (na Fase 2, o `id` da Unsplash). */
+  /** `id` da foto na Unsplash. */
   id: string;
-  /** Texto curto que descreve a imagem — usado em `alt` e na busca. */
+  /** `description` ou, na falta dela, `alt_description` — usado em `alt`. */
   description: string;
-  /** Crédito do autor (exigência da licença da Unsplash a partir da Fase 2). */
+  /** `user.name` — crédito do autor (exigência da licença da Unsplash). */
   author: string;
-  /** Proporção do placeholder, no formato aceito por `aspect-ratio` (ex.: "3 / 4"). */
+  /** `width / height` da foto, no formato aceito por `aspect-ratio` (ex.: "3 / 4"). */
   aspectRatio: string;
-  /**
-   * Par de cores do placeholder mockado (gradiente). Representa o conteúdo da foto,
-   * não o chrome da interface — por isso não sai de token de tema.
-   * Some na Fase 2, quando entra a URL real da imagem.
-   */
-  placeholder: { from: string; to: string };
-  /** Palavras-chave para o filtro de busca mockado. Some na Fase 2. */
-  tags: string[];
+  /** `urls.regular` — imagem em tamanho de exibição. */
+  imageUrl: string;
+  /** `urls.thumb` — miniatura, para grids densos como o board. */
+  thumbUrl: string;
 }
 
-/** Um item já favoritado e presente no board. */
-export type BoardItem = SearchImage;
+/**
+ * Um item favoritado, presente num board em construção (`/`) ou já salvo (`/favoritos`).
+ *
+ * Antes de salvar, `id` é o `id` da foto na Unsplash e `aspectRatio` vem da busca.
+ * Depois de salvo, `id` é o `id` da linha em `board_images` e `aspectRatio` fica
+ * indefinido (o schema não guarda dimensão) — o `ImageTile` usa uma proporção padrão.
+ */
+export interface BoardItem {
+  id: string;
+  /** `id` da foto na Unsplash — usado para de-duplicar favoritos e no `board_images`. */
+  unsplashId: string;
+  description: string;
+  author: string;
+  imageUrl: string;
+  thumbUrl: string;
+  /** Só presente enquanto o item vem da busca (antes de salvar). */
+  aspectRatio?: string;
+}
+
+/** Resposta da Route Handler `GET /api/search`. */
+export type SearchApiResponse =
+  | { ok: true; results: SearchImage[] }
+  | { ok: false; error: SearchApiError };
 
 /**
- * Um board salvo — favoritos agrupados sob um nome.
- *
- * Fase 1: os boards vêm de `src/lib/mock-boards.ts` e as edições (renomear, excluir,
- * remover imagem) vivem só em memória no `BoardsProvider`. Na Fase 3 isto vira uma
- * tabela no Supabase (`id` = PK, `savedAt` = coluna, `items` = relação).
+ * Causas de falha que o client sabe traduzir para uma mensagem específica.
+ * `rate_limit` = a Unsplash barrou por limite de requisições; `unsplash_error` =
+ * qualquer outra falha do lado do servidor/Unsplash.
+ */
+export type SearchApiError = "rate_limit" | "unsplash_error";
+
+/**
+ * Um board salvo, com todas as inspirações — usado na tela de detalhe
+ * (`/favoritos/[id]`). Vem das tabelas `boards` + `board_images` (Fase 3).
  */
 export interface Board {
-  /** Identificador estável — usado na rota `/favoritos/[id]`. */
+  /** `boards.id` — usado na rota `/favoritos/[id]`. */
   id: string;
-  /** Nome que o usuário deu ao board. */
+  /** `boards.title`. */
   name: string;
-  /** Quando o board foi salvo (ISO 8601). */
+  /** `boards.slug` — habilita o link público `/b/<slug>`. */
+  slug: string;
+  /** `boards.search_term` — termo de busca que originou o board, se houver. */
+  searchTerm: string | null;
+  /** `boards.created_at` (ISO 8601). */
   savedAt: string;
-  /** As inspirações guardadas no board. */
+  /** As inspirações guardadas no board, na ordem de `sort_order`. */
   items: BoardItem[];
+}
+
+/**
+ * Versão enxuta de um board para a listagem da biblioteca (`/favoritos`) — sem
+ * carregar todas as imagens, só a contagem e as primeiras para a capa.
+ */
+export interface BoardSummary {
+  id: string;
+  name: string;
+  slug: string;
+  savedAt: string;
+  /** Total de imagens no board. */
+  itemCount: number;
+  /** Até 4 miniaturas para montar a capa. */
+  cover: { thumbUrl: string; description: string }[];
+}
+
+/**
+ * Board na visão pública read-only (`/b/[slug]`) — o que a função Postgres
+ * `get_public_board(slug)` devolve, sem `user_id`, sem `slug`, sem ações.
+ */
+export interface PublicBoard {
+  title: string;
+  savedAt: string;
+  images: {
+    imageUrl: string;
+    thumbUrl: string;
+    author: string;
+    description: string;
+  }[];
 }

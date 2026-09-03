@@ -1,21 +1,36 @@
 "use client";
 
 import { type FormEvent, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { IconEye, IconEyeOff } from "@tabler/icons-react";
 import { css } from "styled-system/css";
+import { iconDefaults } from "@/components/Icon";
+import { createClient } from "@/lib/supabase/client";
 
 /**
- * Formulário da tela de entrada (/login) — decisão de design v3.
+ * Formulário da tela de entrada (/login).
  *
- * Duas colunas separadas por "/" : à esquerda email + senha + "Entrar";
- * à direita, "Entrar com o Google". Abaixo, o link "Esqueci a senha".
- * Tudo em pill (totalmente arredondado).
+ * Duas colunas separadas por "/" : à esquerda email + senha + ação; à direita,
+ * "Entrar com o Google" (desabilitado, "Em breve" — OAuth fica pro backlog,
+ * decisão 03). Abaixo, o toggle login/cadastro e o link "Esqueci a senha".
  *
- * Estado atual: apenas visual + validação local de campos vazios. A autenticação
- * real (Supabase Auth) entra na Fase 3 — ver TODOs abaixo. Nenhum valor de cor/fonte
- * hardcoded: tudo por tokens do tema (panda.config.ts).
+ * Fase 3: autenticação real via Supabase Auth. Sem fluxo de cadastro desenhado,
+ * o mesmo formulário faz as duas coisas — um toggle explícito troca entre
+ * `signInWithPassword` e `signUp` sem redesenhar a tela.
  */
 
 const ERRO_CREDENCIAIS = "Email ou senha não bateram. Tenta de novo.";
+const ERRO_GENERICO = "Não deu pra entrar agora. Tenta de novo.";
+const ERRO_SENHA_CURTA = "Senha muito curta. Usa ao menos 6 caracteres.";
+const ERRO_EMAIL_EXISTENTE = "Esse email já tem conta. Faz login.";
+const ERRO_RATE_LIMIT = "Muitas tentativas agora. Espera um minuto e tenta de novo.";
+const ERRO_EMAIL_INVALIDO = "Esse email não passou na validação do Supabase. Usa outro.";
+const AVISO_CONFIRMA_EMAIL = "Conta criada. Confirma pelo link no seu email pra entrar.";
+
+/** Erros de rate limit do Supabase Auth — status 429, várias mensagens possíveis. */
+function isRateLimit(error: { status?: number; message: string }) {
+  return error.status === 429 || /rate limit|too many requests|over_email_send_rate/i.test(error.message);
+}
 
 const field = css({
   h: "52px",
@@ -51,25 +66,102 @@ const srOnly = css({
   srOnly: true,
 });
 
+type Mode = "login" | "signup";
+
 export function LoginForm() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  // Só caminho interno — barra `?next=//evil.com` e URLs absolutas (open redirect).
+  const nextParam = searchParams.get("next");
+  const next = nextParam && /^\/(?!\/)/.test(nextParam) ? nextParam : "/";
+
+  const [mode, setMode] = useState<Mode>("login");
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
+  const [senhaVisivel, setSenhaVisivel] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  const [aviso, setAviso] = useState<string | null>(null);
+  const [carregando, setCarregando] = useState(false);
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    // TODO(Fase 3): trocar a validação local pela chamada de Supabase Auth
-    // (signInWithPassword) e mapear o retorno de erro para ERRO_CREDENCIAIS.
+    setErro(null);
+    setAviso(null);
+
     if (!email.trim() || !senha.trim()) {
       setErro(ERRO_CREDENCIAIS);
       return;
     }
-    setErro(null);
+
+    setCarregando(true);
+    const supabase = createClient();
+
+    try {
+      if (mode === "signup") {
+        const { data, error } = await supabase.auth.signUp({
+          email: email.trim(),
+          password: senha,
+        });
+
+        if (error) {
+          if (isRateLimit(error)) {
+            setErro(ERRO_RATE_LIMIT);
+          } else if (/already registered|already exists/i.test(error.message)) {
+            setErro(ERRO_EMAIL_EXISTENTE);
+          } else if (/at least 6|password should be/i.test(error.message)) {
+            setErro(ERRO_SENHA_CURTA);
+          } else if (/email address.*invalid|invalid.*email/i.test(error.message)) {
+            setErro(ERRO_EMAIL_INVALIDO);
+          } else {
+            setErro(ERRO_GENERICO);
+          }
+          return;
+        }
+
+        if (data.session) {
+          redirectIn();
+          return;
+        }
+
+        // Sem sessão = projeto Supabase com "Confirm email" ligado.
+        setAviso(AVISO_CONFIRMA_EMAIL);
+        return;
+      }
+
+      const { error } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password: senha,
+      });
+
+      if (error) {
+        if (isRateLimit(error)) {
+          setErro(ERRO_RATE_LIMIT);
+        } else if (/email not confirmed/i.test(error.message)) {
+          setErro(AVISO_CONFIRMA_EMAIL);
+        } else {
+          setErro(/invalid login credentials/i.test(error.message) ? ERRO_CREDENCIAIS : ERRO_GENERICO);
+        }
+        return;
+      }
+
+      redirectIn();
+    } finally {
+      setCarregando(false);
+    }
   }
 
-  function handleGoogle() {
-    // TODO(Fase 3): Supabase Auth — signInWithOAuth({ provider: "google" }).
+  function redirectIn() {
+    router.replace(next);
+    router.refresh();
   }
+
+  function toggleMode() {
+    setMode((m) => (m === "login" ? "signup" : "login"));
+    setErro(null);
+    setAviso(null);
+  }
+
+  const acaoLabel = mode === "login" ? "Entrar" : "Criar conta";
 
   return (
     <div className={css({ w: "full", maxW: "760px" })}>
@@ -106,6 +198,37 @@ export function LoginForm() {
         </div>
       )}
 
+      {aviso && (
+        <div
+          role="status"
+          className={css({
+            w: "full",
+            maxW: "480px",
+            mx: "auto",
+            mb: "5",
+            textAlign: "left",
+            bg: "gray.2",
+            borderWidth: "1px",
+            borderStyle: "solid",
+            borderColor: "gray.6",
+            rounded: "2xl",
+            px: "4",
+            py: "3",
+          })}
+        >
+          <span
+            className={css({
+              fontFamily: "body",
+              fontSize: "xs",
+              lineHeight: "1.4",
+              color: "gray.11",
+            })}
+          >
+            {aviso}
+          </span>
+        </div>
+      )}
+
       <form
         onSubmit={handleSubmit}
         noValidate
@@ -118,7 +241,7 @@ export function LoginForm() {
           textAlign: "left",
         })}
       >
-        {/* Coluna esquerda: email -> senha -> Entrar */}
+        {/* Coluna esquerda: email -> senha -> ação */}
         <div
           className={css({
             flex: "1",
@@ -147,20 +270,58 @@ export function LoginForm() {
           <label className={srOnly} htmlFor="login-senha">
             Senha
           </label>
-          <input
-            id="login-senha"
-            name="senha"
-            type="password"
-            autoComplete="current-password"
-            placeholder="Senha"
-            value={senha}
-            onChange={(e) => setSenha(e.target.value)}
-            aria-invalid={erro ? "true" : undefined}
-            className={field}
-          />
+          <div className={css({ position: "relative" })}>
+            <input
+              id="login-senha"
+              name="senha"
+              type={senhaVisivel ? "text" : "password"}
+              autoComplete={mode === "login" ? "current-password" : "new-password"}
+              placeholder="Senha"
+              value={senha}
+              onChange={(e) => setSenha(e.target.value)}
+              aria-invalid={erro ? "true" : undefined}
+              className={`${field} ${css({ pr: "14" })}`}
+            />
+            <button
+              type="button"
+              onClick={() => setSenhaVisivel((v) => !v)}
+              aria-label={senhaVisivel ? "Esconder senha" : "Mostrar senha"}
+              aria-pressed={senhaVisivel}
+              className={css({
+                position: "absolute",
+                top: "50%",
+                right: "4",
+                transform: "translateY(-50%)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                w: "9",
+                h: "9",
+                rounded: "full",
+                border: "none",
+                cursor: "pointer",
+                bg: "transparent",
+                color: "gray.9",
+                transition: "color 0.15s ease",
+                _hover: { color: "textPrimary" },
+                _focusVisible: {
+                  outline: "2px solid",
+                  outlineColor: "ctaPurple",
+                  outlineOffset: "2px",
+                },
+              })}
+            >
+              {senhaVisivel ? (
+                <IconEyeOff {...iconDefaults} size={18} aria-hidden />
+              ) : (
+                <IconEye {...iconDefaults} size={18} aria-hidden />
+              )}
+            </button>
+          </div>
 
           <button
             type="submit"
+            disabled={carregando}
             className={`${pillButton} ${css({
               border: "none",
               bg: "ctaPurple",
@@ -174,7 +335,7 @@ export function LoginForm() {
               _hover: { bg: "brand.10" },
             })}`}
           >
-            <span>Entrar</span>
+            <span>{carregando ? "Um instante" : acaoLabel}</span>
             <span
               className={css({
                 w: "44px",
@@ -224,19 +385,22 @@ export function LoginForm() {
           </span>
         </div>
 
-        {/* Coluna direita: Entrar com o Google */}
+        {/* Coluna direita: Entrar com o Google (Em breve) */}
         <div
           className={css({
             flex: "1",
             display: "flex",
             flexDir: "column",
             justifyContent: "center",
+            gap: "1.5",
             pl: { md: "6" },
           })}
         >
           <button
             type="button"
-            onClick={handleGoogle}
+            disabled
+            aria-disabled="true"
+            title="Em breve"
             className={`${pillButton} ${css({
               borderWidth: "1px",
               borderStyle: "solid",
@@ -247,7 +411,6 @@ export function LoginForm() {
               fontSize: "sm",
               justifyContent: "center",
               gap: "2.5",
-              _hover: { bg: "gray.2" },
             })}`}
           >
             <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
@@ -270,20 +433,47 @@ export function LoginForm() {
             </svg>
             Entrar com o Google
           </button>
+          <span
+            className={css({
+              fontFamily: "body",
+              fontSize: "xs",
+              color: "gray.9",
+              textAlign: "center",
+            })}
+          >
+            Em breve
+          </span>
         </div>
       </form>
 
-      <div className={css({ textAlign: "center" })}>
-        {/* TODO(Fase 3): rota real de recuperação de senha. */}
-        <a
-          href="#"
+      <div className={css({ textAlign: "center", mt: "7", display: "flex", flexDir: "column", gap: "2" })}>
+        <button
+          type="button"
+          onClick={toggleMode}
           className={css({
             display: "inline-block",
-            mt: "7",
+            border: "none",
+            bg: "transparent",
+            cursor: "pointer",
             fontFamily: "body",
             fontWeight: "medium",
             fontSize: "sm",
             color: "ctaPurple",
+            _hover: { textDecoration: "underline" },
+          })}
+        >
+          {mode === "login" ? "Não tem conta? Criar conta" : "Já tem conta? Entrar"}
+        </button>
+
+        {/* Recuperação de senha real fica pro backlog — segue só link. */}
+        <a
+          href="#"
+          className={css({
+            display: "inline-block",
+            fontFamily: "body",
+            fontWeight: "medium",
+            fontSize: "sm",
+            color: "gray.9",
             textDecoration: "none",
             _hover: { textDecoration: "underline" },
           })}

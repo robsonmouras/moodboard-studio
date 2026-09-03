@@ -2,29 +2,67 @@
 
 import { css } from "styled-system/css";
 import { ResultCard } from "@/components/ResultCard";
+import { Spinner } from "@/components/ui";
 import type { SearchImage } from "@/types";
 
+/** Estado da busca real (Fase 2) — dirige o que o grid renderiza. */
+export type SearchStatus =
+  | "loading"
+  | "success"
+  | "empty"
+  | "networkError"
+  | "rateLimit"
+  | "apiError";
+
 /**
- * Área de resultados da busca. Cobre os estados "sem resultado" e "grid populado"
- * da matriz da Fase 1. O estado de carregando fica para a Fase 2 (busca real na Unsplash).
+ * Área de resultados da busca. Cobre os estados da Fase 2: carregando, grid populado,
+ * sem resultado, falha de rede e rate limit da Unsplash. As mensagens seguem o
+ * `decisões/guia-tom-de-voz.md`.
  */
 export function ResultsGrid({
   query,
+  status,
   results,
   favoriteIds,
   onToggleFavorite,
 }: {
   query: string;
+  status: SearchStatus;
   results: SearchImage[];
   favoriteIds: Set<string>;
   onToggleFavorite: (image: SearchImage) => void;
 }) {
-  if (results.length === 0) {
+  if (status === "loading") {
     return (
-      <Empty
-        title={`Nada por aqui para “${query.trim()}”`}
-        body="Tenta um termo mais aberto."
+      <Notice>
+        <span className={css({ display: "inline-flex", alignItems: "center", gap: "2.5" })}>
+          <Spinner size="sm" className={css({ color: "ctaPurple" })} aria-hidden />
+          Buscando imagens.
+        </span>
+      </Notice>
+    );
+  }
+
+  if (status === "networkError") {
+    return <Notice title="Falha de conexão." body="Verifica sua internet e tenta de novo." />;
+  }
+
+  if (status === "rateLimit") {
+    return (
+      <Notice
+        title="Unsplash bateu o limite de buscas agora."
+        body="Espera um minuto e tenta de novo."
       />
+    );
+  }
+
+  if (status === "apiError") {
+    return <Notice title="A busca falhou agora." body="Tenta de novo." />;
+  }
+
+  if (status === "empty" || results.length === 0) {
+    return (
+      <Notice title={`Nada por aqui para “${query}”.`} body="Tenta um termo mais aberto." />
     );
   }
 
@@ -48,7 +86,15 @@ export function ResultsGrid({
   );
 }
 
-function Empty({ title, body }: { title: string; body: string }) {
+function Notice({
+  title,
+  body,
+  children,
+}: {
+  title?: string;
+  body?: string;
+  children?: React.ReactNode;
+}) {
   return (
     <div
       className={css({
@@ -69,18 +115,20 @@ function Empty({ title, body }: { title: string; body: string }) {
           color: "textPrimary",
         })}
       >
-        {title}
+        {title ?? children}
       </p>
-      <p
-        className={css({
-          fontFamily: "body",
-          fontSize: "sm",
-          color: "gray.11",
-          maxW: "42ch",
-        })}
-      >
-        {body}
-      </p>
+      {body && (
+        <p
+          className={css({
+            fontFamily: "body",
+            fontSize: "sm",
+            color: "gray.11",
+            maxW: "42ch",
+          })}
+        >
+          {body}
+        </p>
+      )}
     </div>
   );
 }

@@ -22,7 +22,10 @@
 
 # misc
 .DS_Store
-*.pem
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
 
 # debug
 npm-debug.log*
@@ -30,11 +33,26 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
-.env*
+# env files (nunca versionar segredos reais) — só o .example vai pro git
+.env
+.env.*
+!.env.example
+!.env.local.example
+
+# segredos / credenciais avulsas
+*.pem
+*.key
+*.p12
+*.pfx
+*_rsa
+*_rsa.pub
+secrets.json
+service-account*.json
+.supabase/
 
 # vercel
 .vercel
+.turbo
 
 # typescript
 *.tsbuildinfo

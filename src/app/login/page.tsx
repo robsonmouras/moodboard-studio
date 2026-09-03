@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { css } from "styled-system/css";
 import { LoginForm } from "@/components/LoginForm";
 
@@ -147,7 +148,9 @@ export default function LoginPage() {
             </p>
           </div>
 
-          <LoginForm />
+          <Suspense fallback={null}>
+            <LoginForm />
+          </Suspense>
         </main>
 
         <footer

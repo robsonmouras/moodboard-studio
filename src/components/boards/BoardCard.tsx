@@ -1,13 +1,14 @@
 "use client";
 
+import { useState, useTransition } from "react";
 import Link from "next/link";
-import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { IconPencil, IconTrash } from "@tabler/icons-react";
 import { css } from "styled-system/css";
 import { BoardCover } from "@/components/boards/BoardCover";
-import { useBoards } from "@/components/boards/BoardsProvider";
 import { iconDefaults } from "@/components/Icon";
-import type { Board } from "@/types";
+import { deleteBoard } from "@/app/favoritos/actions";
+import type { BoardSummary } from "@/types";
 
 /** "3 inspirações" / "1 inspiração" / "Nenhuma inspiração". */
 function countLabel(n: number) {
@@ -16,13 +17,25 @@ function countLabel(n: number) {
 }
 
 /**
- * Um board na biblioteca (`/favoritos`). O card inteiro leva pra tela de detalhe
- * (onde se renomeia e se removem imagens); o botão de lixeira exclui, com uma
- * confirmação de dois toques pra não apagar sem querer.
+ * Um board na biblioteca (`/favoritos`). O card inteiro leva pra tela de detalhe;
+ * o botão de lixeira exclui, com uma confirmação de dois toques. Excluir grava no
+ * Supabase (server action) e revalida a lista.
  */
-export function BoardCard({ board }: { board: Board }) {
-  const { deleteBoard } = useBoards();
+export function BoardCard({ board }: { board: BoardSummary }) {
+  const router = useRouter();
   const [confirming, setConfirming] = useState(false);
+  const [pending, startTransition] = useTransition();
+
+  function handleDelete() {
+    startTransition(async () => {
+      const result = await deleteBoard(board.id);
+      if (result && !result.ok) {
+        setConfirming(false);
+        return;
+      }
+      router.refresh();
+    });
+  }
 
   return (
     <div className={css({ position: "relative" })}>
@@ -48,7 +61,7 @@ export function BoardCard({ board }: { board: Board }) {
           },
         })}
       >
-        <BoardCover items={board.items} />
+        <BoardCover cover={board.cover} />
 
         <div className={css({ display: "flex", flexDir: "column", gap: "0.5", px: "1", pb: "1" })}>
           <span
@@ -63,7 +76,7 @@ export function BoardCard({ board }: { board: Board }) {
             {board.name}
           </span>
           <span className={css({ fontFamily: "body", fontSize: "xs", color: "gray.11" })}>
-            {countLabel(board.items.length)}
+            {countLabel(board.itemCount)}
           </span>
         </div>
       </Link>
@@ -100,7 +113,8 @@ export function BoardCard({ board }: { board: Board }) {
           <div className={css({ display: "flex", gap: "2" })}>
             <button
               type="button"
-              onClick={() => deleteBoard(board.id)}
+              disabled={pending}
+              onClick={handleDelete}
               className={css({
                 h: "36px",
                 px: "4",
@@ -113,6 +127,7 @@ export function BoardCard({ board }: { board: Board }) {
                 fontWeight: "semibold",
                 fontSize: "sm",
                 _hover: { bg: "brand.10" },
+                _disabled: { opacity: 0.5, cursor: "not-allowed" },
                 _focusVisible: {
                   outline: "2px solid",
                   outlineColor: "ctaPurple",

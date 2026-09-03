@@ -3,11 +3,18 @@
 Gerador de moodboard: busca de imagens (Unsplash), favoritar, montar board, login e link
 público de compartilhamento.
 
-> **Status:** Fase 1 — protótipo de interface. A home (`/`) é a tela de busca: campo de
-> busca → grid de resultados mockados → favoritar → board (tudo em estado local, sem
-> backend). A tela de login existe em código (`/login`) mas fica fora do fluxo — ver
-> `../decisões/decisao-01-home-busca-sem-login.md`. Consumo real da Unsplash = Fase 2;
-> auth + persistência = Fase 3. Ver `../decisões/fase-1-checklist.md`.
+> **Status:** Fase 3 — autenticação real (Supabase Auth, email/senha) e persistência de
+> verdade. `/` e `/favoritos` são protegidas por middleware (`src/middleware.ts`): sem
+> sessão, redireciona pra `/login`. A busca da home (`/`) consome a Unsplash via a Route
+> Handler `src/app/api/search`; "Salvar" grava o board no Postgres (`POST /api/boards` →
+> tabelas `boards` + `board_images`, RLS por `user_id`) e gera um slug público.
+> `/favoritos` e `/favoritos/[id]` leem/escrevem no Supabase (renomear, remover imagem,
+> excluir — tudo real, via Server Actions). Nova rota pública `/b/[slug]` mostra o board
+> read-only sem exigir login, lendo pela função Postgres `get_public_board` (nunca `select`
+> direto). `Navbar` global (`Home | Favoritos | Perfil` — Perfil desabilitado, decisão 03)
+> mostra o email da sessão + "Sair". Ver
+> `../prompts/fase3-autenticacao-persistencia-resultado.md` e
+> `../decisões/decisao-03-fase3-auth-persistencia.md`.
 
 ---
 
@@ -20,8 +27,9 @@ público de compartilhamento.
 | Gerenciador de pacotes | **npm** | |
 | Estilização | **Panda CSS** + **Park UI** (sobre Ark UI) | ver nota abaixo |
 | Ícones | **@tabler/icons-react** | outline, `stroke-width={1}`, 20px base |
-| Auth / Banco | **@supabase/supabase-js** | só o client (`src/lib/supabase.ts`) — sem login nesta fase |
-| Imagens | **Unsplash** | só variável de ambiente documentada — sem chamadas ainda |
+| Auth / Banco | **@supabase/ssr** (+ `@supabase/supabase-js`) | clients de browser/servidor/middleware em `src/lib/supabase/` — sessão em cookie, lida no servidor |
+| Slug público | **nanoid** | slug de 10 chars url-safe gerado ao salvar o board (`POST /api/boards`) |
+| Imagens | **Unsplash** | `GET /search/photos` pela Route Handler `src/app/api/search` (server-side; chave sem `NEXT_PUBLIC_`) |
 | Deploy alvo | **Vercel** | sem configuração específica de outro provedor |
 
 ### Nota sobre Park UI + Panda (decisão de execução)
@@ -79,11 +87,17 @@ uma decisão de projeto.
 
 ```
 src/
-  app/            rotas (App Router) — layout raiz + / (tela de busca) + /login (fora do fluxo)
-  components/     componentes React (PascalCase); components/ui/ = Park UI
-  lib/            clients, dados e utilitários (supabase.ts, mock-images.ts)
+  middleware.ts   proteção de rota + renovação de sessão Supabase (/, /favoritos)
+  app/            rotas (App Router) — layout raiz + / (busca) + /favoritos (biblioteca) +
+                  /favoritos/[id] (detalhe) + /favoritos/actions.ts (Server Actions) +
+                  /login + /b/[slug] (board público read-only, sem sessão);
+                  app/api/search/ = busca na Unsplash; app/api/boards/ = grava o board
+  components/     componentes React (PascalCase); components/ui/ = Park UI;
+                  components/boards/ = biblioteca, detalhe, capa, "não encontrado"
+  lib/            supabase/ (client.ts, server.ts, middleware.ts), boards.ts (leituras),
+                  use-debounced-value.ts
   theme/          tema do Park UI/Panda: tokens, recipes, cores
-  types/          tipos de domínio (SearchImage, BoardItem, Board)
+  types/          tipos de domínio (index.ts) + shape do banco (database.ts)
 styled-system/    GERADO pelo Panda — não versionado
 ```
 
@@ -108,13 +122,17 @@ Ver `.env.local.example`. `.env.local` não vai para o git.
 
 | Variável | Para quê | Já usada? |
 |---|---|---|
-| `NEXT_PUBLIC_SUPABASE_URL` | client Supabase | client instanciado, sem chamadas |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | client Supabase | idem |
-| `UNSPLASH_ACCESS_KEY` | API da Unsplash | não — placeholder para a Fase 2 |
+| `NEXT_PUBLIC_SUPABASE_URL` | clients Supabase (browser/servidor/middleware) | **sim** — auth + leitura/escrita de boards |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | idem | **sim** |
+| `UNSPLASH_ACCESS_KEY` | API da Unsplash | **sim** — lida só na Route Handler `src/app/api/search` (nunca no client) |
+
+Pré-requisito de banco: rodar o SQL de `../prompts/fase3-autenticacao-persistencia.md`
+§"Schema do banco" no SQL Editor do Supabase (tabelas `boards`/`board_images`, RLS por dono,
+função `get_public_board`). Para a demo fluir sem passo de email, desligar **Authentication →
+Providers → Email → Confirm email** no painel do Supabase.
 
 ## Fora de escopo nesta fase
 
-Nenhuma chamada real à Unsplash (o grid vem de `src/lib/mock-images.ts`); nenhuma
-autenticação real (o `/login` só valida campo vazio); nenhuma persistência — "Salvar"
-é só feedback visual, nada vai para o Supabase e não há tabela. Consumo real da API =
-Fase 2; auth + persistência = Fase 3.
+OAuth do Google (só o botão desabilitado, "Em breve"); tela `/perfil` (a `Navbar` reserva o
+item, desabilitado); recuperação de senha real ("Esqueci a senha" segue só link); edição
+colaborativa, múltiplos boards simultâneos por cliente, export em PDF/imagem.

@@ -1,14 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { IconArrowLeft, IconTrash, IconX } from "@tabler/icons-react";
+import { IconArrowLeft, IconLink, IconTrash, IconX } from "@tabler/icons-react";
 import { css } from "styled-system/css";
-import { useBoards } from "@/components/boards/BoardsProvider";
 import { iconDefaults } from "@/components/Icon";
 import { ImageTile } from "@/components/ImageTile";
 import { Navbar } from "@/components/Navbar";
+import { deleteBoard, removeBoardImage, renameBoard } from "@/app/favoritos/actions";
+import type { Board } from "@/types";
 
 /** "3 inspirações" / "1 inspiração" / "Nenhuma inspiração". */
 function countLabel(n: number) {
@@ -52,57 +53,109 @@ const ctaLink = css({
   _focusVisible: { outline: "2px solid", outlineColor: "ctaPurple", outlineOffset: "2px" },
 });
 
+const headerButton = css({
+  display: "inline-flex",
+  alignItems: "center",
+  gap: "1.5",
+  flexShrink: "0",
+  h: "40px",
+  px: "4",
+  rounded: "full",
+  borderWidth: "1px",
+  borderStyle: "solid",
+  borderColor: "gray.6",
+  cursor: "pointer",
+  bg: "surface",
+  color: "textPrimary",
+  fontFamily: "body",
+  fontSize: "sm",
+  transition: "background-color 0.15s ease",
+  _hover: { bg: "gray.2" },
+  _focusVisible: { outline: "2px solid", outlineColor: "ctaPurple", outlineOffset: "2px" },
+});
+
 /**
  * Detalhe de um board (`/favoritos/[id]`).
  *
- * Renomear acontece direto no título (input controlado pelo `BoardsProvider`, salva a
- * cada tecla). Cada imagem tem um "x" pra sair do board. "Excluir board" apaga e volta
- * pra biblioteca. Tudo em memória na Fase 1 — ver [[BoardsProvider]].
+ * Fase 3: renomear (salva em `boards.title` ao sair do campo), remover uma imagem
+ * (deleta a linha em `board_images`) e excluir o board (deleta a linha em `boards`,
+ * `on delete cascade` cuida das imagens) — tudo via server action, escrita real.
+ * "Copiar link" copia `<origem>/b/<slug>` pra área de transferência.
  */
-export function BoardDetailView({ boardId }: { boardId: string }) {
+export function BoardDetailView({ board }: { board: Board }) {
   const router = useRouter();
-  const { getBoard, renameBoard, deleteBoard, removeItem } = useBoards();
-  const board = getBoard(boardId);
+  const [name, setName] = useState(board.name);
+  const [syncedName, setSyncedName] = useState(board.name);
   const [confirming, setConfirming] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  if (!board) {
-    return (
-      <div className={shell}>
-        <Navbar />
-        <main
-          className={css({
-            flex: "1",
-            w: "full",
-            maxW: "1120px",
-            mx: "auto",
-            px: { base: "5", md: "8" },
-            py: { base: "16", md: "24" },
-            display: "flex",
-            flexDir: "column",
-            alignItems: "center",
-            textAlign: "center",
-            gap: "3",
-          })}
-        >
-          <p
-            className={css({
-              fontFamily: "display",
-              fontWeight: "400",
-              fontSize: "xl",
-              color: "textPrimary",
-            })}
-          >
-            Board não encontrado
-          </p>
-          <p className={css({ fontFamily: "body", fontSize: "sm", color: "gray.11" })}>
-            Ele pode ter sido excluído nesta sessão.
-          </p>
-          <Link href="/favoritos" className={ctaLink}>
-            Voltar pra Favoritos
-          </Link>
-        </main>
-      </div>
-    );
+  // Quando o board volta do servidor com outro título (após renomear/refresh),
+  // realinha o campo — padrão "ajustar estado no render" do React, sem effect.
+  if (board.name !== syncedName) {
+    setSyncedName(board.name);
+    setName(board.name);
+  }
+
+  useEffect(() => {
+    return () => {
+      if (toastTimer.current) clearTimeout(toastTimer.current);
+    };
+  }, []);
+
+  function flashToast(message: string) {
+    setToast(message);
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(null), 2200);
+  }
+
+  function commitName() {
+    const trimmed = name.trim();
+    if (!trimmed || trimmed === board.name) {
+      setName(board.name);
+      return;
+    }
+    startTransition(async () => {
+      const result = await renameBoard(board.id, trimmed);
+      if (!result.ok) {
+        setName(board.name);
+        flashToast("Não deu pra renomear agora.");
+        return;
+      }
+      router.refresh();
+    });
+  }
+
+  function handleRemoveImage(imageId: string) {
+    startTransition(async () => {
+      const result = await removeBoardImage(board.id, imageId);
+      if (!result.ok) {
+        flashToast("Não deu pra remover agora.");
+        return;
+      }
+      router.refresh();
+    });
+  }
+
+  function handleDelete() {
+    startTransition(async () => {
+      const result = await deleteBoard(board.id);
+      if (result && !result.ok) {
+        setConfirming(false);
+        flashToast("Não deu pra excluir agora.");
+      }
+    });
+  }
+
+  async function copyLink() {
+    const url = `${window.location.origin}/b/${board.slug}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      flashToast("Link copiado.");
+    } catch {
+      flashToast("Não deu pra copiar. Copia da barra de endereço.");
+    }
   }
 
   const count = board.items.length;
@@ -145,8 +198,12 @@ export function BoardDetailView({ boardId }: { boardId: string }) {
             <input
               id="board-name"
               type="text"
-              value={board.name}
-              onChange={(event) => renameBoard(board.id, event.target.value)}
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              onBlur={commitName}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") event.currentTarget.blur();
+              }}
               placeholder="Nome do board"
               className={css({
                 w: "full",
@@ -173,37 +230,16 @@ export function BoardDetailView({ boardId }: { boardId: string }) {
             </span>
           </div>
 
-          <button
-            type="button"
-            onClick={() => setConfirming(true)}
-            className={css({
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "1.5",
-              flexShrink: "0",
-              h: "40px",
-              px: "4",
-              rounded: "full",
-              borderWidth: "1px",
-              borderStyle: "solid",
-              borderColor: "gray.6",
-              cursor: "pointer",
-              bg: "surface",
-              color: "textPrimary",
-              fontFamily: "body",
-              fontSize: "sm",
-              transition: "background-color 0.15s ease",
-              _hover: { bg: "gray.2" },
-              _focusVisible: {
-                outline: "2px solid",
-                outlineColor: "ctaPurple",
-                outlineOffset: "2px",
-              },
-            })}
-          >
-            <IconTrash {...iconDefaults} size={16} aria-hidden />
-            Excluir board
-          </button>
+          <div className={css({ display: "flex", alignItems: "center", gap: "2", flexShrink: "0" })}>
+            <button type="button" onClick={copyLink} className={headerButton}>
+              <IconLink {...iconDefaults} size={16} aria-hidden />
+              Copiar link
+            </button>
+            <button type="button" onClick={() => setConfirming(true)} className={headerButton}>
+              <IconTrash {...iconDefaults} size={16} aria-hidden />
+              Excluir board
+            </button>
+          </div>
         </div>
 
         {count === 0 ? (
@@ -245,8 +281,9 @@ export function BoardDetailView({ boardId }: { boardId: string }) {
                 <ImageTile image={item} />
                 <button
                   type="button"
+                  disabled={pending}
                   aria-label={`Remover “${item.description}” do board`}
-                  onClick={() => removeItem(board.id, item.id)}
+                  onClick={() => handleRemoveImage(item.id)}
                   className={css({
                     position: "absolute",
                     top: "2.5",
@@ -263,6 +300,7 @@ export function BoardDetailView({ boardId }: { boardId: string }) {
                     color: "textPrimary",
                     boxShadow: "sm",
                     _hover: { bg: "gray.2" },
+                    _disabled: { opacity: 0.5, cursor: "not-allowed" },
                     _focusVisible: {
                       outline: "2px solid",
                       outlineColor: "ctaPurple",
@@ -282,6 +320,36 @@ export function BoardDetailView({ boardId }: { boardId: string }) {
           </div>
         )}
       </main>
+
+      <div
+        aria-live="polite"
+        className={css({
+          position: "fixed",
+          left: "50%",
+          bottom: "6",
+          zIndex: "toast",
+          transform: "translateX(-50%)",
+          pointerEvents: "none",
+        })}
+      >
+        {toast && (
+          <span
+            className={css({
+              display: "inline-block",
+              px: "4",
+              py: "2.5",
+              rounded: "full",
+              bg: "textPrimary",
+              color: "page",
+              fontFamily: "body",
+              fontSize: "sm",
+              boxShadow: "lg",
+            })}
+          >
+            {toast}
+          </span>
+        )}
+      </div>
 
       {confirming && (
         <div
@@ -361,10 +429,8 @@ export function BoardDetailView({ boardId }: { boardId: string }) {
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  deleteBoard(board.id);
-                  router.push("/favoritos");
-                }}
+                disabled={pending}
+                onClick={handleDelete}
                 className={css({
                   h: "40px",
                   px: "5",
@@ -377,6 +443,7 @@ export function BoardDetailView({ boardId }: { boardId: string }) {
                   fontWeight: "semibold",
                   fontSize: "sm",
                   _hover: { bg: "brand.10" },
+                  _disabled: { opacity: 0.5, cursor: "not-allowed" },
                   _focusVisible: {
                     outline: "2px solid",
                     outlineColor: "ctaPurple",

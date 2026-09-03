@@ -13,18 +13,20 @@ import type { BoardItem } from "@/types";
  * deslizando de baixo para cima e volta a sumir (deslizando para baixo) quando o
  * board fica vazio de novo. Fica sempre preso ao rodapé enquanto houver favoritos.
  *
- * Fase 1 sem persistência: "Salvar" só devolve o feedback visual (toast no pai).
- * Os favoritos são mantidos entre buscas diferentes pelo `SearchWorkspace`.
+ * Fase 3: "Salvar" grava o board no Supabase (a chamada vive no `SearchWorkspace`);
+ * `saving` desabilita o botão enquanto a gravação está em voo.
  */
 export function BoardPanel({
   name,
   items,
+  saving = false,
   onNameChange,
   onRemove,
   onSave,
 }: {
   name: string;
   items: BoardItem[];
+  saving?: boolean;
   onNameChange: (name: string) => void;
   onRemove: (id: string) => void;
   onSave: () => void;
@@ -133,7 +135,7 @@ export function BoardPanel({
             />
             <button
               type="button"
-              disabled={visible.length === 0}
+              disabled={visible.length === 0 || saving}
               onClick={onSave}
               className={css({
                 flexShrink: "0",
@@ -157,7 +159,7 @@ export function BoardPanel({
                 },
               })}
             >
-              Salvar
+              {saving ? "Salvando" : "Salvar"}
             </button>
           </div>
         </div>

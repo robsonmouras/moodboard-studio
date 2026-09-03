@@ -1,15 +1,21 @@
 import type { Metadata } from "next";
 import { BoardsLibrary } from "@/components/boards/BoardsLibrary";
+import { listBoards } from "@/lib/boards";
 
 /**
- * Rota `/favoritos` — a biblioteca de boards salvos do usuário (item "Favoritos" da navbar).
+ * Rota `/favoritos` — a biblioteca de boards salvos do usuário logado.
  *
- * Fase 1: boards mockados, edições em memória. A parte interativa vive em <BoardsLibrary>.
+ * Fase 3: os boards vêm do Supabase (RLS por `user_id`). Server Component busca a
+ * lista; a interatividade (filtro, excluir) vive em <BoardsLibrary>.
  */
 export const metadata: Metadata = {
   title: "Favoritos — Moodboard Studio",
 };
 
-export default function FavoritosPage() {
-  return <BoardsLibrary />;
+// Sessão por request — nada de cache entre usuários.
+export const dynamic = "force-dynamic";
+
+export default async function FavoritosPage() {
+  const boards = await listBoards();
+  return <BoardsLibrary boards={boards} />;
 }

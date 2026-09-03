@@ -5,30 +5,24 @@ import Link from "next/link";
 import { IconSearch } from "@tabler/icons-react";
 import { css } from "styled-system/css";
 import { BoardCard } from "@/components/boards/BoardCard";
-import { useBoards } from "@/components/boards/BoardsProvider";
 import { iconDefaults } from "@/components/Icon";
 import { Navbar } from "@/components/Navbar";
+import type { BoardSummary } from "@/types";
 
 /**
  * Biblioteca de boards salvos (`/favoritos`).
  *
- * Lista todos os boards com a contagem de inspirações, uma busca que filtra por nome
- * (e pelas descrições das imagens dentro do board) e, em cada card, atalhos pra editar
- * e excluir. Estado dos boards vem do `BoardsProvider` (Fase 1: seed mockado).
+ * Lista os boards do usuário logado com a contagem de inspirações, uma busca que
+ * filtra por nome e, em cada card, atalhos pra editar e excluir. Os dados vêm do
+ * Supabase (Server Component pai); aqui é só a interatividade.
  */
-export function BoardsLibrary() {
-  const { boards } = useBoards();
+export function BoardsLibrary({ boards }: { boards: BoardSummary[] }) {
   const [query, setQuery] = useState("");
 
   const filtered = useMemo(() => {
     const normalized = query.trim().toLowerCase();
     if (!normalized) return boards;
-    return boards.filter((board) => {
-      const haystack = [board.name, ...board.items.map((item) => item.description)]
-        .join(" ")
-        .toLowerCase();
-      return haystack.includes(normalized);
-    });
+    return boards.filter((board) => board.name.toLowerCase().includes(normalized));
   }, [boards, query]);
 
   const total = boards.length;
@@ -132,8 +126,8 @@ export function BoardsLibrary() {
 
         {total === 0 ? (
           <EmptyState
-            title="Você ainda não salvou nenhum board"
-            body="Busque referências na home, favorite as que curtir e salve como um board."
+            title="Nenhum board ainda."
+            body="Busca um tema e começa a favoritar."
             action={{ href: "/", label: "Buscar referências" }}
           />
         ) : filtered.length === 0 ? (
