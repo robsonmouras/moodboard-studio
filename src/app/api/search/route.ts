@@ -13,6 +13,16 @@ import type { SearchApiResponse, SearchImage } from "@/types";
 
 const UNSPLASH_ENDPOINT = "https://api.unsplash.com/search/photos";
 const PER_PAGE = 24;
+// A Unsplash rejeita páginas além disso (~10 mil resultados / PER_PAGE). Passar
+// disso é sempre 4xx, então nem manda a requisição.
+const MAX_PAGE = Math.floor(10_000 / PER_PAGE);
+
+/** Lê `?page=`, com piso 1 e teto no limite da Unsplash. Vazio/lixo vira 1. */
+function readPage(url: URL): number {
+  const raw = Number.parseInt(url.searchParams.get("page") ?? "1", 10);
+  if (!Number.isFinite(raw) || raw < 1) return 1;
+  return Math.min(raw, MAX_PAGE);
+}
 
 interface UnsplashPhoto {
   id: string;
@@ -60,8 +70,10 @@ function isRateLimited(response: Response, bodyText: string) {
 }
 
 export async function GET(request: Request) {
-  const query = new URL(request.url).searchParams.get("q")?.trim() ?? "";
-  if (!query) return reply({ ok: true, results: [] });
+  const url = new URL(request.url);
+  const query = url.searchParams.get("q")?.trim() ?? "";
+  const page = readPage(url);
+  if (!query) return reply({ ok: true, results: [], page: 1, totalPages: 0 });
 
   const accessKey = process.env.UNSPLASH_ACCESS_KEY;
   if (!accessKey) {
@@ -71,8 +83,8 @@ export async function GET(request: Request) {
 
   let response: Response;
   try {
-    const url = `${UNSPLASH_ENDPOINT}?query=${encodeURIComponent(query)}&per_page=${PER_PAGE}&content_filter=high`;
-    response = await fetch(url, {
+    const endpoint = `${UNSPLASH_ENDPOINT}?query=${encodeURIComponent(query)}&page=${page}&per_page=${PER_PAGE}&content_filter=high`;
+    response = await fetch(endpoint, {
       headers: { Authorization: `Client-ID ${accessKey}`, "Accept-Version": "v1" },
       cache: "no-store",
     });
@@ -91,5 +103,10 @@ export async function GET(request: Request) {
   }
 
   const data = (await response.json()) as UnsplashSearchResponse;
-  return reply({ ok: true, results: data.results.map(toSearchImage) });
+  return reply({
+    ok: true,
+    results: data.results.map(toSearchImage),
+    page,
+    totalPages: Math.min(data.total_pages, MAX_PAGE),
+  });
 }

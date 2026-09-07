@@ -101,22 +101,52 @@ type SearchOutcome =
 function deriveSearchState(
   currentQuery: string,
   outcome: SearchOutcome | null,
-): { status: SearchStatus; results: SearchImage[] } {
+): { status: SearchStatus; results: SearchImage[]; totalPages: number } {
   if (!currentQuery || !outcome || outcome.query !== currentQuery) {
-    return { status: "loading", results: [] };
+    return { status: "loading", results: [], totalPages: 0 };
   }
   if (outcome.kind === "networkError") {
-    return { status: "networkError", results: [] };
+    return { status: "networkError", results: [], totalPages: 0 };
   }
   if (!outcome.body.ok) {
     return {
       status: outcome.body.error === "rate_limit" ? "rateLimit" : "apiError",
       results: [],
+      totalPages: 0,
     };
   }
   const results = outcome.body.results;
-  return { status: results.length === 0 ? "empty" : "success", results };
+  return {
+    status: results.length === 0 ? "empty" : "success",
+    results,
+    totalPages: outcome.body.totalPages,
+  };
 }
+
+/**
+ * Páginas 2+ do grid, acumuladas pelo scroll infinito (decisão 10). Fica marcada
+ * com o termo a que pertence — um append que chega depois de o usuário trocar a
+ * busca é descartado. `exhausted` cobre o caso da Unsplash devolver uma página
+ * vazia antes de `totalPages` (acervo menor do que ela anuncia).
+ */
+type MorePages = {
+  query: string;
+  items: SearchImage[];
+  /** Próxima página a pedir (a página 1 vem pelo fluxo normal). */
+  nextPage: number;
+  loading: boolean;
+  failed: boolean;
+  exhausted: boolean;
+};
+
+const NO_MORE_PAGES: MorePages = {
+  query: "",
+  items: [],
+  nextPage: 2,
+  loading: false,
+  failed: false,
+  exhausted: false,
+};
 
 /** Imagem mostrada como prova nos avisos de duplicata (miniatura + descrição). */
 type DupeThumb = { key: string; description: string; thumbUrl?: string };
@@ -412,6 +442,9 @@ export function SearchWorkspace({
   // `status` e `results` são derivados disso — assim o efeito nunca chama setState de
   // forma síncrona, só dentro dos callbacks async do fetch.
   const [outcome, setOutcome] = useState<SearchOutcome | null>(null);
+  // Páginas seguintes do grid, carregadas pelo scroll infinito (decisão 10). A
+  // página 1 continua vindo por `outcome`; aqui acumulam as 2+.
+  const [more, setMore] = useState<MorePages>(NO_MORE_PAGES);
 
   // --- Modo contextual de adição (`?add=<id>`) -----------------------------
   // Staging das inspirações escolhidas pra somar no board de destino. Favoritar
@@ -516,7 +549,69 @@ export function SearchWorkspace({
   // Faixa de boards recentes só no estado inicial e só se o usuário já tem boards.
   const showRecent = !hasSearched && recentBoards.length > 0;
 
-  const { status, results } = deriveSearchState(debouncedQuery, outcome);
+  const { status, results: firstPage, totalPages } = deriveSearchState(debouncedQuery, outcome);
+
+  // Páginas 2+ só contam se forem do termo atual (um append lento de uma busca
+  // anterior é ignorado até o próximo `loadMore` recriar o estado).
+  const moreForQuery = more.query === debouncedQuery ? more : NO_MORE_PAGES;
+
+  // Grid = página 1 + páginas seguintes, sem repetir id (a Unsplash às vezes
+  // devolve a mesma foto em páginas diferentes; chave duplicada quebra o React).
+  const results = useMemo(() => {
+    if (moreForQuery.items.length === 0) return firstPage;
+    const seen = new Set(firstPage.map((image) => image.id));
+    const merged = [...firstPage];
+    for (const image of moreForQuery.items) {
+      if (seen.has(image.id)) continue;
+      seen.add(image.id);
+      merged.push(image);
+    }
+    return merged;
+  }, [firstPage, moreForQuery.items]);
+
+  const nextPage = moreForQuery.nextPage;
+  const hasMorePages =
+    status === "success" && !moreForQuery.exhausted && nextPage <= totalPages;
+  const loadingMore = moreForQuery.loading;
+  const loadMoreFailed = moreForQuery.failed;
+
+  /**
+   * Puxa a próxima página do termo atual e concatena no grid. Chamado pela
+   * sentinela do `ResultsGrid` (scroll infinito) e pelo botão de fallback. Os
+   * guardas evitam disparo duplo: só roda com a busca em `success`, sem outra
+   * página em voo e com página restante.
+   */
+  const loadMore = useCallback(async () => {
+    if (status !== "success" || loadingMore || !hasMorePages) return;
+    const term = debouncedQuery;
+    const page = nextPage;
+    setMore((prev) => {
+      const base = prev.query === term ? prev : { ...NO_MORE_PAGES, query: term };
+      return { ...base, loading: true, failed: false };
+    });
+    try {
+      const response = await fetch(
+        `/api/search?q=${encodeURIComponent(term)}&page=${page}`,
+      );
+      const body = (await response.json()) as SearchApiResponse;
+      setMore((prev) => {
+        if (prev.query !== term) return prev; // usuário trocou a busca no meio
+        if (!body.ok) return { ...prev, loading: false, failed: true };
+        return {
+          ...prev,
+          items: [...prev.items, ...body.results],
+          nextPage: page + 1,
+          loading: false,
+          failed: false,
+          exhausted: body.results.length === 0,
+        };
+      });
+    } catch {
+      setMore((prev) =>
+        prev.query === term ? { ...prev, loading: false, failed: true } : prev,
+      );
+    }
+  }, [status, loadingMore, hasMorePages, debouncedQuery, nextPage]);
 
   useEffect(() => {
     return () => {
@@ -973,6 +1068,10 @@ export function SearchWorkspace({
             favoriteIds={favoriteIds}
             inBoardLabels={inBoardLabels}
             onToggleFavorite={toggleFavorite}
+            hasMore={hasMorePages}
+            loadingMore={loadingMore}
+            loadMoreFailed={loadMoreFailed}
+            onLoadMore={loadMore}
           />
         )}
       </main>
