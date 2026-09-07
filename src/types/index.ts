@@ -57,9 +57,15 @@ export interface BoardItem {
   height?: number;
 }
 
-/** Resposta da Route Handler `GET /api/search`. */
+/**
+ * Resposta da Route Handler `GET /api/search`.
+ *
+ * `page` é a página devolvida (1-based) e `totalPages` quantas a Unsplash diz ter
+ * para o termo — o client usa os dois para saber se ainda há o que carregar no
+ * scroll infinito do grid (decisão 10).
+ */
 export type SearchApiResponse =
-  | { ok: true; results: SearchImage[] }
+  | { ok: true; results: SearchImage[]; page: number; totalPages: number }
   | { ok: false; error: SearchApiError };
 
 /**
