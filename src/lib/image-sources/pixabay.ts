@@ -65,6 +65,7 @@ function toSearchImage(hit: PixabayHit): SearchImage {
 }
 
 export const pixabaySource: ImageSourceAdapter = {
+  id: "pixabay",
   label: "Pixabay",
 
   isConfigured() {

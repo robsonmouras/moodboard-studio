@@ -1,13 +1,16 @@
 import { NextResponse } from "next/server";
 import { MAX_PAGE, searchImages } from "@/lib/image-sources";
+import { parseSources } from "@/lib/image-sources/catalog";
 import type { SearchApiResponse } from "@/types";
 
 /**
  * Route Handler da busca de imagens.
  *
- * O client (`SearchWorkspace`) chama `GET /api/search?q=<termo>&page=<n>`. A busca
- * é agregada: o módulo `src/lib/image-sources` consulta todas as fontes ativas
- * (Unsplash, Pexels, …) no servidor e combina os resultados. As chaves das fontes
+ * O client (`SearchWorkspace`) chama
+ * `GET /api/search?q=<termo>&page=<n>&sources=<fonte,fonte>`. `sources` é opcional
+ * — ausente significa todas. A busca é agregada: o módulo `src/lib/image-sources`
+ * consulta no servidor as fontes pedidas (Unsplash, Pexels, …) e combina os
+ * resultados. As chaves das fontes
  * (sem prefixo `NEXT_PUBLIC_`) nunca chegam ao bundle do browser, e a resposta
  * crua de cada fonte é mapeada para `SearchImage`, não repassada.
  */
@@ -29,7 +32,8 @@ export async function GET(request: Request) {
   const page = readPage(url);
   if (!query) return reply({ ok: true, results: [], page: 1, totalPages: 0 });
 
-  const result = await searchImages(query, page);
+  const sources = parseSources(url.searchParams.get("sources"));
+  const result = await searchImages(query, page, sources);
 
   if (!result.ok) {
     return result.error === "rate_limit"

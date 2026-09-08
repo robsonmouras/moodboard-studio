@@ -58,6 +58,7 @@ function isRateLimited(response: Response, bodyText: string) {
 }
 
 export const unsplashSource: ImageSourceAdapter = {
+  id: "unsplash",
   label: "Unsplash",
 
   isConfigured() {

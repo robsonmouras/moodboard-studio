@@ -1,5 +1,6 @@
 import "server-only";
-import type { SearchImage } from "@/types";
+import type { ImageSource, SearchImage } from "@/types";
+import { ALL_SOURCE_IDS } from "./catalog";
 import { pexelsSource } from "./pexels";
 import { pixabaySource } from "./pixabay";
 import { MAX_PAGE, type ImageSourceAdapter, type SourceOutcome } from "./types";
@@ -10,9 +11,10 @@ export { MAX_PAGE, PER_PAGE } from "./types";
 /**
  * Agregador de fontes de imagem da busca.
  *
- * A ideia não é substituir a Unsplash, é somar: `searchImages` consulta todas as
- * fontes configuradas (`ImageSourceAdapter.isConfigured()`) em paralelo, intercala
- * os resultados num único grid e de-duplica por `id`. Resiliência: a falha de uma
+ * A ideia não é substituir a Unsplash, é somar: `searchImages` consulta em
+ * paralelo as fontes pedidas (parâmetro `sources`, padrão todas) que estejam
+ * configuradas (`ImageSourceAdapter.isConfigured()`), intercala os resultados num
+ * único grid e de-duplica por `id`. Resiliência: a falha de uma
  * fonte só remove aquela origem da rodada — a busca segue com o que as outras
  * responderam. Só quando TODAS falham é que o erro sobe pro client (e vira
  * `rate_limit` apenas se todas bateram cota).
@@ -44,11 +46,20 @@ function interleave(lists: SearchImage[][]): SearchImage[] {
   return merged;
 }
 
-export async function searchImages(query: string, page: number): Promise<AggregatedSearch> {
-  const active = SOURCES.filter((source) => source.isConfigured());
+export async function searchImages(
+  query: string,
+  page: number,
+  sources: readonly ImageSource[] = ALL_SOURCE_IDS,
+): Promise<AggregatedSearch> {
+  const wanted = new Set<ImageSource>(
+    sources.length > 0 ? sources : ALL_SOURCE_IDS,
+  );
+  const active = SOURCES.filter(
+    (source) => wanted.has(source.id) && source.isConfigured(),
+  );
   if (active.length === 0) {
     console.error(
-      "Nenhuma fonte de imagem configurada — preencha ao menos UNSPLASH_ACCESS_KEY, PEXELS_API_KEY ou PIXABAY_API_KEY em .env.local.",
+      "Nenhuma fonte de imagem ativa para esta busca — verifique o filtro de fontes e as chaves UNSPLASH_ACCESS_KEY / PEXELS_API_KEY / PIXABAY_API_KEY em .env.local.",
     );
     return { ok: false, error: "unsplash_error" };
   }
