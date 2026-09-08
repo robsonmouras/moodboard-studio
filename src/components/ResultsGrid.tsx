@@ -71,7 +71,7 @@ export function ResultsGrid({
   if (status === "rateLimit") {
     return (
       <Notice
-        title="Unsplash bateu o limite de buscas agora."
+        title="As fontes de imagem bateram o limite de buscas agora."
         body="Espera um minuto e tenta de novo."
       />
     );
