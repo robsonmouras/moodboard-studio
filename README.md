@@ -125,6 +125,8 @@ Ver `.env.local.example`. `.env.local` não vai para o git.
 | `NEXT_PUBLIC_SUPABASE_URL` | clients Supabase (browser/servidor/middleware) | **sim** — auth + leitura/escrita de boards |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | idem | **sim** |
 | `UNSPLASH_ACCESS_KEY` | API da Unsplash | **sim** — lida só na Route Handler `src/app/api/search` (nunca no client) |
+| `PEXELS_API_KEY` | API da Pexels (fonte agregada da busca) | opcional — lida só no servidor; sem ela, a Pexels só fica de fora da rodada |
+| `PIXABAY_API_KEY` | API da Pixabay (fonte agregada da busca) | opcional — lida só no servidor; sem ela, a Pixabay só fica de fora da rodada |
 
 Pré-requisito de banco: rodar o SQL de `../prompts/fase3-autenticacao-persistencia.md`
 §"Schema do banco" no SQL Editor do Supabase (tabelas `boards`/`board_images`, RLS por dono,
