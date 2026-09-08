@@ -1,6 +1,7 @@
 import "server-only";
 import type { SearchImage } from "@/types";
 import { pexelsSource } from "./pexels";
+import { pixabaySource } from "./pixabay";
 import { MAX_PAGE, type ImageSourceAdapter, type SourceOutcome } from "./types";
 import { unsplashSource } from "./unsplash";
 
@@ -21,7 +22,7 @@ export { MAX_PAGE, PER_PAGE } from "./types";
  * verdadeiro enquanto qualquer fonte ativa ainda tiver página seguinte.
  */
 
-const SOURCES: ImageSourceAdapter[] = [unsplashSource, pexelsSource];
+const SOURCES: ImageSourceAdapter[] = [unsplashSource, pexelsSource, pixabaySource];
 
 export type AggregatedSearch =
   | { ok: true; results: SearchImage[]; hasMore: boolean }
@@ -47,7 +48,7 @@ export async function searchImages(query: string, page: number): Promise<Aggrega
   const active = SOURCES.filter((source) => source.isConfigured());
   if (active.length === 0) {
     console.error(
-      "Nenhuma fonte de imagem configurada — preencha ao menos UNSPLASH_ACCESS_KEY ou PEXELS_API_KEY em .env.local.",
+      "Nenhuma fonte de imagem configurada — preencha ao menos UNSPLASH_ACCESS_KEY, PEXELS_API_KEY ou PIXABAY_API_KEY em .env.local.",
     );
     return { ok: false, error: "unsplash_error" };
   }

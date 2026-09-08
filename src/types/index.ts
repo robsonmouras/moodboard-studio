@@ -13,7 +13,7 @@
  * A busca combina o resultado de todas num único grid; cada `SearchImage` carrega
  * a sua origem para atribuição e de-duplicação.
  */
-export type ImageSource = "unsplash" | "pexels";
+export type ImageSource = "unsplash" | "pexels" | "pixabay";
 
 /**
  * Uma imagem de resultado de busca — montada pela Route Handler `src/app/api/search`

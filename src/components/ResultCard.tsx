@@ -130,6 +130,7 @@ const sourceTag = css({
 const SOURCE_LABEL: Record<SearchImage["source"], string> = {
   unsplash: "Unsplash",
   pexels: "Pexels",
+  pixabay: "Pixabay",
 };
 
 // Sem "botão" — o coração fica direto sobre o gradiente, na mesma linha do crédito,
