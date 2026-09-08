@@ -81,7 +81,7 @@ export async function POST(request: Request) {
   }
 
   const searchTerm = body.searchTerm?.trim() || null;
-  const title = body.title?.trim() || searchTerm || "Board sem nome";
+  const title = body.title?.trim() || "";
 
   // --- Anexar a um board existente (fluxo "adicionar ao board 'X'") ---------
   const targetId = typeof body.boardId === "string" ? body.boardId.trim() : "";
@@ -165,6 +165,11 @@ export async function POST(request: Request) {
   }
 
   // --- Criar um board novo -------------------------------------------------
+  // O nome é obrigatório ao criar (no append o destino já tem nome próprio).
+  if (!title) {
+    return NextResponse.json({ ok: false, error: "name_required" }, { status: 400 });
+  }
+
   // Slug único — a constraint `unique` da tabela é a fonte da verdade; em
   // colisão (raríssima) gera outro slug e tenta de novo.
   let boardId: string | null = null;

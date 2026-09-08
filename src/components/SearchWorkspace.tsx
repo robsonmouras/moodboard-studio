@@ -800,6 +800,11 @@ export function SearchWorkspace({
    */
   function requestSave() {
     if (board.length === 0 || saving) return;
+    // Nome obrigatório ao criar um board (o `BoardPanel` já barra, mas garante aqui).
+    if (boardName.trim() === "") {
+      flashToast("Dê um nome ao board para salvar.");
+      return;
+    }
     const typed = normalizeName(boardName);
     const match = typed
       ? existingBoards.find((candidate) => normalizeName(candidate.name) === typed)
@@ -814,6 +819,10 @@ export function SearchWorkspace({
   /** Grava o board: cria um novo, ou (se `mergeInto`) soma as imagens num existente. */
   async function saveBoard(mergeInto: ExistingBoard | null) {
     if (board.length === 0 || saving) return;
+    if (!mergeInto && boardName.trim() === "") {
+      flashToast("Dê um nome ao board para salvar.");
+      return;
+    }
     setNameClash(null);
     setSaving(true);
     try {
