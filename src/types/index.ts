@@ -9,17 +9,35 @@
  */
 
 /**
- * Uma imagem de resultado de busca — montada a partir da resposta real da Unsplash
- * (`GET /search/photos`) pela Route Handler `src/app/api/search`. A resposta bruta da
- * Unsplash nunca chega ao client; só esta forma enxuta.
+ * Fontes de imagem que o agregador de busca (`src/lib/image-sources`) consulta.
+ * A busca combina o resultado de todas num único grid; cada `SearchImage` carrega
+ * a sua origem para atribuição e de-duplicação.
+ */
+export type ImageSource = "unsplash" | "pexels";
+
+/**
+ * Uma imagem de resultado de busca — montada pela Route Handler `src/app/api/search`
+ * a partir da resposta real de uma das fontes (`src/lib/image-sources`). A resposta
+ * bruta da fonte nunca chega ao client; só esta forma enxuta.
  */
 export interface SearchImage {
-  /** `id` da foto na Unsplash. */
+  /**
+   * Identificador estável e único no grid combinado. Para a Unsplash é o `id` cru
+   * da foto (compatível com boards salvos antes da agregação); para as demais
+   * fontes vem prefixado (`"pexels:1234"`) pra nunca colidir entre origens.
+   * É o que se grava em `board_images.unsplash_id` e a chave de de-dup dos favoritos.
+   */
   id: string;
+  /** Qual fonte serviu esta imagem — usado na atribuição e na de-duplicação. */
+  source: ImageSource;
   /** `description` ou, na falta dela, `alt_description` — usado em `alt`. */
   description: string;
-  /** `user.name` — crédito do autor (exigência da licença da Unsplash). */
+  /** Nome do fotógrafo — crédito exigido/pedido pela licença das fontes. */
   author: string;
+  /** Página do fotógrafo na fonte, quando disponível — link do crédito na UI. */
+  authorUrl?: string;
+  /** Página da foto na fonte, quando disponível — atribuição da imagem em si. */
+  sourceUrl?: string;
   /** `width / height` da foto, no formato aceito por `aspect-ratio` (ex.: "3 / 4"). */
   aspectRatio: string;
   /** `width` da foto na Unsplash — persistido pra reconstruir a proporção no board salvo. */
@@ -41,7 +59,10 @@ export interface SearchImage {
  */
 export interface BoardItem {
   id: string;
-  /** `id` da foto na Unsplash — usado para de-duplicar favoritos e no `board_images`. */
+  /**
+   * `SearchImage.id` da foto (id cru da Unsplash ou `"fonte:id"` das demais) —
+   * usado para de-duplicar favoritos e gravado em `board_images.unsplash_id`.
+   */
   unsplashId: string;
   description: string;
   author: string;
@@ -60,8 +81,9 @@ export interface BoardItem {
 /**
  * Resposta da Route Handler `GET /api/search`.
  *
- * `page` é a página devolvida (1-based) e `totalPages` quantas a Unsplash diz ter
- * para o termo — o client usa os dois para saber se ainda há o que carregar no
+ * `page` é a página devolvida (1-based) e `totalPages` é `page + 1` enquanto
+ * alguma fonte ainda tem resultado para o termo, ou `page` quando todas se
+ * esgotaram — o client usa os dois para saber se ainda há o que carregar no
  * scroll infinito do grid (decisão 10).
  */
 export type SearchApiResponse =
@@ -70,8 +92,10 @@ export type SearchApiResponse =
 
 /**
  * Causas de falha que o client sabe traduzir para uma mensagem específica.
- * `rate_limit` = a Unsplash barrou por limite de requisições; `unsplash_error` =
- * qualquer outra falha do lado do servidor/Unsplash.
+ * `rate_limit` = TODAS as fontes ativas bateram limite de requisições agora;
+ * `unsplash_error` = qualquer outra falha que zerou o resultado (nome mantido
+ * por compatibilidade com o client). A falha de uma fonte só, com outra
+ * respondendo, não vira erro — aquela origem apenas fica de fora da rodada.
  */
 export type SearchApiError = "rate_limit" | "unsplash_error";
 

@@ -87,9 +87,21 @@ const overlay = css({
   pointerEvents: "none",
 });
 
-const authorName = css({
+// Bloco de crédito: nome do fotógrafo (link pra fonte quando há) + a origem da
+// foto. A licença de Unsplash/Pexels pede atribuição ao autor; o rótulo da fonte
+// deixa claro de onde a imagem veio no grid combinado.
+const credit = css({
   minW: "0",
   flex: "1",
+  display: "flex",
+  flexDir: "column",
+  gap: "0.5",
+  // O overlay é `pointer-events: none`; o link do autor volta a ser clicável.
+  pointerEvents: "auto",
+});
+
+const authorName = css({
+  maxW: "full",
   color: "white",
   fontFamily: "body",
   fontSize: "xs",
@@ -99,6 +111,26 @@ const authorName = css({
   textOverflow: "ellipsis",
   whiteSpace: "nowrap",
 });
+
+const authorLink = css({
+  textDecoration: "none",
+  _hover: { textDecoration: "underline" },
+  _focusVisible: { outline: "2px solid", outlineColor: "white", outlineOffset: "2px" },
+});
+
+const sourceTag = css({
+  color: "white",
+  opacity: "0.7",
+  fontFamily: "body",
+  fontSize: "10px",
+  lineHeight: "1",
+  textShadow: "0 1px 2px token(colors.black.a7)",
+});
+
+const SOURCE_LABEL: Record<SearchImage["source"], string> = {
+  unsplash: "Unsplash",
+  pexels: "Pexels",
+};
 
 // Sem "botão" — o coração fica direto sobre o gradiente, na mesma linha do crédito,
 // como uma legenda só. Sombra dá leitura em qualquer foto (clara ou escura).
@@ -157,7 +189,22 @@ export function ResultCard({
       )}
 
       <figcaption className={overlay} data-role="overlay">
-        <span className={authorName}>{image.author}</span>
+        <span className={credit}>
+          {image.authorUrl ? (
+            <a
+              href={image.authorUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={`${authorName} ${authorLink}`}
+              title={`${image.author} — abrir na ${SOURCE_LABEL[image.source]}`}
+            >
+              {image.author}
+            </a>
+          ) : (
+            <span className={authorName}>{image.author}</span>
+          )}
+          <span className={sourceTag}>{SOURCE_LABEL[image.source]}</span>
+        </span>
 
         <button
           type="button"
