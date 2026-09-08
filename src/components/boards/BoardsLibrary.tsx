@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { MagnifyingGlass, X } from "@phosphor-icons/react";
 import { css } from "styled-system/css";
 import { BoardCard } from "@/components/boards/BoardCard";
@@ -15,9 +16,40 @@ import type { BoardSummary } from "@/types";
  * Lista os boards do usuário logado com a contagem de inspirações, uma busca que
  * filtra por nome e, em cada card, atalhos pra editar e excluir. Os dados vêm do
  * Supabase (Server Component pai); aqui é só a interatividade.
+ *
+ * `justDeleted` vem do `?excluido=1` que a action `deleteBoard` põe no redirect:
+ * dispara o toast "Board excluído." na montagem e limpa o query param.
  */
-export function BoardsLibrary({ boards }: { boards: BoardSummary[] }) {
+export function BoardsLibrary({
+  boards,
+  justDeleted = false,
+}: {
+  boards: BoardSummary[];
+  justDeleted?: boolean;
+}) {
+  const router = useRouter();
   const [query, setQuery] = useState("");
+  const [toast, setToast] = useState<string | null>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (toastTimer.current) clearTimeout(toastTimer.current);
+    };
+  }, []);
+
+  // Caiu aqui vindo de uma exclusão (`?excluido=1` no redirect da action): toast
+  // de sucesso e limpa o query param, o que zera `justDeleted` de volta. Excluir
+  // pelo card não remonta esta tela, então o gatilho é a prop, não a montagem.
+  useEffect(() => {
+    if (!justDeleted) return;
+    queueMicrotask(() => {
+      setToast("Board excluído.");
+      if (toastTimer.current) clearTimeout(toastTimer.current);
+      toastTimer.current = setTimeout(() => setToast(null), 2200);
+    });
+    router.replace("/favoritos", { scroll: false });
+  }, [justDeleted, router]);
 
   const filtered = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -180,6 +212,36 @@ export function BoardsLibrary({ boards }: { boards: BoardSummary[] }) {
           </ul>
         )}
       </main>
+
+      <div
+        aria-live="polite"
+        className={css({
+          position: "fixed",
+          left: "50%",
+          bottom: "6",
+          zIndex: "toast",
+          transform: "translateX(-50%)",
+          pointerEvents: "none",
+        })}
+      >
+        {toast && (
+          <span
+            className={css({
+              display: "inline-block",
+              px: "4",
+              py: "2.5",
+              rounded: "full",
+              bg: "textPrimary",
+              color: "page",
+              fontFamily: "body",
+              fontSize: "sm",
+              boxShadow: "lg",
+            })}
+          >
+            {toast}
+          </span>
+        )}
+      </div>
     </div>
   );
 }
