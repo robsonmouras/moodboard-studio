@@ -42,7 +42,11 @@ export async function removeBoardImage(
   return { ok: true };
 }
 
-/** Exclui o board inteiro (o `on delete cascade` cuida das imagens) e volta pra lista. */
+/**
+ * Exclui o board inteiro (o `on delete cascade` cuida das imagens) e volta pra
+ * lista. O `?excluido=1` sobrevive à navegação e vira o toast de sucesso em
+ * `/favoritos` — a própria lista limpa o query param depois de disparar.
+ */
 export async function deleteBoard(boardId: string): Promise<ActionResult> {
   const supabase = await createClient();
   const { error } = await supabase.from("boards").delete().eq("id", boardId);
@@ -50,5 +54,5 @@ export async function deleteBoard(boardId: string): Promise<ActionResult> {
   if (error) return { ok: false, error: "delete_failed" };
 
   revalidatePath("/favoritos");
-  redirect("/favoritos");
+  redirect("/favoritos?excluido=1");
 }
