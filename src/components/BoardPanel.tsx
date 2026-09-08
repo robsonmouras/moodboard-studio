@@ -45,11 +45,26 @@ export function BoardPanel({
 }) {
   const isOpen = items.length > 0;
   const isAppend = variant === "append";
+  // No fluxo de criar board, o nome é obrigatório — sem nome não dá pra salvar.
+  const needsName = !isAppend && name.trim().length === 0;
 
   // Autocomplete do nome do board.
   const [suggestOpen, setSuggestOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
   const showSuggestions = suggestOpen && nameSuggestions.length > 0;
+
+  // Vira `true` quando o usuário tenta salvar sem nome — aí o aviso aparece.
+  const [nameError, setNameError] = useState(false);
+  const showNameError = nameError && needsName && isOpen;
+
+  // "Salvar" só passa adiante com nome preenchido; senão sinaliza o erro.
+  function requestSave() {
+    if (needsName) {
+      setNameError(true);
+      return;
+    }
+    onSave();
+  }
 
   function pickSuggestion(value: string) {
     onNameChange(value);
@@ -59,7 +74,7 @@ export function BoardPanel({
 
   function handleNameKeyDown(event: KeyboardEvent<HTMLInputElement>) {
     if (!showSuggestions) {
-      if (event.key === "Enter") onSave();
+      if (event.key === "Enter") requestSave();
       return;
     }
     if (event.key === "ArrowDown") {
@@ -73,7 +88,7 @@ export function BoardPanel({
       if (activeIndex >= 0) pickSuggestion(nameSuggestions[activeIndex]);
       else {
         setSuggestOpen(false);
-        onSave();
+        requestSave();
       }
     } else if (event.key === "Escape") {
       setSuggestOpen(false);
@@ -176,11 +191,15 @@ export function BoardPanel({
                 aria-expanded={showSuggestions}
                 aria-controls="board-name-suggestions"
                 aria-autocomplete="list"
+                aria-invalid={showNameError}
+                aria-describedby={showNameError ? "board-name-hint" : undefined}
+                required
                 value={name}
                 onChange={(event) => {
                   onNameChange(event.target.value);
                   setSuggestOpen(true);
                   setActiveIndex(-1);
+                  if (event.target.value.trim()) setNameError(false);
                 }}
                 onFocus={() => setSuggestOpen(true)}
                 onBlur={() => setSuggestOpen(false)}
@@ -192,13 +211,16 @@ export function BoardPanel({
                   rounded: "full",
                   borderWidth: "1px",
                   borderStyle: "solid",
-                  borderColor: "gray.6",
+                  borderColor: showNameError ? "red.9" : "gray.6",
                   bg: "page",
                   fontFamily: "body",
                   fontSize: "sm",
                   color: "textPrimary",
                   _placeholder: { color: "gray.9" },
-                  _focusVisible: { outline: "none", borderColor: "gray.9" },
+                  _focusVisible: {
+                    outline: "none",
+                    borderColor: showNameError ? "red.9" : "gray.9",
+                  },
                 })}
               />
 
@@ -262,12 +284,39 @@ export function BoardPanel({
                   ))}
                 </ul>
               )}
+
+              {showNameError && !showSuggestions && (
+                <p
+                  id="board-name-hint"
+                  role="alert"
+                  className={css({
+                    position: "absolute",
+                    left: "0",
+                    right: "0",
+                    bottom: "calc(100% + 6px)",
+                    zIndex: "dropdown",
+                    bg: "surface",
+                    borderWidth: "1px",
+                    borderStyle: "solid",
+                    borderColor: "border",
+                    rounded: "xl",
+                    boxShadow: "lg",
+                    px: "3",
+                    py: "2",
+                    fontFamily: "body",
+                    fontSize: "xs",
+                    color: "red.11",
+                  })}
+                >
+                  Dê um nome ao board para salvar.
+                </p>
+              )}
             </div>
             )}
             <button
               type="button"
               disabled={visible.length === 0 || saving}
-              onClick={onSave}
+              onClick={isAppend ? onSave : requestSave}
               className={css({
                 flexShrink: "0",
                 h: "40px",
