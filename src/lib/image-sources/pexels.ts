@@ -59,6 +59,7 @@ function toSearchImage(photo: PexelsPhoto): SearchImage {
 }
 
 export const pexelsSource: ImageSourceAdapter = {
+  id: "pexels",
   label: "Pexels",
 
   isConfigured() {

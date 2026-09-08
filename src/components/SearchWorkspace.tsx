@@ -12,9 +12,21 @@ import { Navbar } from "@/components/Navbar";
 import { RecentBoards } from "@/components/RecentBoards";
 import { ResultsGrid, type SearchStatus } from "@/components/ResultsGrid";
 import { SearchField } from "@/components/SearchField";
+import { SearchSourceFilter } from "@/components/SearchSourceFilter";
 import { SearchSuggestions } from "@/components/SearchSuggestions";
+import {
+  ALL_SOURCE_IDS,
+  parseSources,
+  serializeSources,
+} from "@/lib/image-sources/catalog";
 import { useDebouncedValue } from "@/lib/use-debounced-value";
-import type { BoardItem, BoardSummary, SearchApiResponse, SearchImage } from "@/types";
+import type {
+  BoardItem,
+  BoardSummary,
+  ImageSource,
+  SearchApiResponse,
+  SearchImage,
+} from "@/types";
 
 /**
  * Board de destino do "modo contextual de adição" — o usuário chegou aqui de
@@ -59,6 +71,20 @@ function normalizeName(name: string): string {
 const DRAFT_KEY = "moodboard:draft-board";
 type DraftBoard = { name: string; items: BoardItem[] };
 
+/** Fontes de imagem que o usuário escolheu na busca — reaplicadas na próxima sessão. */
+const SOURCES_KEY = "moodboard:search-sources";
+
+/**
+ * URL da busca: termo sempre, `page` só a partir da 2ª e `sources` só quando não
+ * for o conjunto completo (aí `sourcesParam` já vem `null` de `serializeSources`).
+ */
+function buildSearchUrl(term: string, page: number, sourcesParam: string | null): string {
+  const params = new URLSearchParams({ q: term });
+  if (page > 1) params.set("page", String(page));
+  if (sourcesParam) params.set("sources", sourcesParam);
+  return `/api/search?${params.toString()}`;
+}
+
 function readDraft(): DraftBoard | null {
   if (typeof window === "undefined") return null;
   try {
@@ -88,21 +114,25 @@ function writeDraft(draft: DraftBoard) {
   }
 }
 
-/** Desfecho da última busca concluída, marcado com o termo a que pertence. */
+/**
+ * Desfecho da última busca concluída, marcado com a `searchKey` (termo + fontes)
+ * a que pertence.
+ */
 type SearchOutcome =
-  | { query: string; kind: "response"; body: SearchApiResponse }
-  | { query: string; kind: "networkError" };
+  | { key: string; kind: "response"; body: SearchApiResponse }
+  | { key: string; kind: "networkError" };
 
 /**
- * Traduz o desfecho guardado + o termo atual em `status`/`results` para o `ResultsGrid`.
- * Enquanto o desfecho não corresponde ao termo atual (debounce pendente ou requisição
- * em voo), o estado é "loading".
+ * Traduz o desfecho guardado + a busca atual em `status`/`results` para o `ResultsGrid`.
+ * Enquanto o desfecho não corresponde à busca atual (`searchKey` diferente — debounce
+ * pendente, fontes recém-trocadas ou requisição em voo), o estado é "loading".
  */
 function deriveSearchState(
   currentQuery: string,
+  currentKey: string,
   outcome: SearchOutcome | null,
 ): { status: SearchStatus; results: SearchImage[]; totalPages: number } {
-  if (!currentQuery || !outcome || outcome.query !== currentQuery) {
+  if (!currentQuery || !outcome || outcome.key !== currentKey) {
     return { status: "loading", results: [], totalPages: 0 };
   }
   if (outcome.kind === "networkError") {
@@ -125,12 +155,13 @@ function deriveSearchState(
 
 /**
  * Páginas 2+ do grid, acumuladas pelo scroll infinito (decisão 10). Fica marcada
- * com o termo a que pertence — um append que chega depois de o usuário trocar a
- * busca é descartado. `exhausted` cobre o caso da Unsplash devolver uma página
- * vazia antes de `totalPages` (acervo menor do que ela anuncia).
+ * com a `searchKey` (termo + fontes) a que pertence — um append que chega depois
+ * de o usuário trocar a busca ou o filtro de fontes é descartado. `exhausted`
+ * cobre o caso da Unsplash devolver uma página vazia antes de `totalPages`
+ * (acervo menor do que ela anuncia).
  */
 type MorePages = {
-  query: string;
+  key: string;
   items: SearchImage[];
   /** Próxima página a pedir (a página 1 vem pelo fluxo normal). */
   nextPage: number;
@@ -140,7 +171,7 @@ type MorePages = {
 };
 
 const NO_MORE_PAGES: MorePages = {
-  query: "",
+  key: "",
   items: [],
   nextPage: 2,
   loading: false,
@@ -428,6 +459,10 @@ export function SearchWorkspace({
 }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
+  // Fontes de imagem escolhidas na busca (mín. 1). Começa com todas; a escolha
+  // real da sessão anterior vem do `localStorage` logo após a montagem (efeito abaixo).
+  const [sources, setSources] = useState<ImageSource[]>(() => [...ALL_SOURCE_IDS]);
+  const sourcesHydrated = useRef(false);
   const [board, setBoard] = useState<BoardItem[]>([]);
   const [boardName, setBoardName] = useState("");
   const [toast, setToast] = useState<string | null>(null);
@@ -488,6 +523,11 @@ export function SearchWorkspace({
   );
 
   const debouncedQuery = useDebouncedValue(query.trim(), 400);
+  // Assinatura da busca atual: termo + fontes. É a identidade do resultado
+  // guardado e das páginas do scroll infinito — trocar as fontes muda a `searchKey`,
+  // invalida as duas coisas e dispara nova busca do zero. `null` = conjunto completo.
+  const sourcesParam = serializeSources(sources);
+  const searchKey = `${debouncedQuery}::${sourcesParam ?? "all"}`;
   // Coração cheio = está na seleção atual. No modo contextual isso é só o
   // `staged` (o "já no board" é sinalizado pelo selo, não pelo coração).
   const favoriteIds = useMemo(
@@ -549,11 +589,16 @@ export function SearchWorkspace({
   // Faixa de boards recentes só no estado inicial e só se o usuário já tem boards.
   const showRecent = !hasSearched && recentBoards.length > 0;
 
-  const { status, results: firstPage, totalPages } = deriveSearchState(debouncedQuery, outcome);
+  const { status, results: firstPage, totalPages } = deriveSearchState(
+    debouncedQuery,
+    searchKey,
+    outcome,
+  );
 
-  // Páginas 2+ só contam se forem do termo atual (um append lento de uma busca
-  // anterior é ignorado até o próximo `loadMore` recriar o estado).
-  const moreForQuery = more.query === debouncedQuery ? more : NO_MORE_PAGES;
+  // Páginas 2+ só contam se forem da busca atual (mesmo termo E mesmas fontes) —
+  // um append lento de uma busca anterior é ignorado até o próximo `loadMore`
+  // recriar o estado.
+  const moreForQuery = more.key === searchKey ? more : NO_MORE_PAGES;
 
   // Grid = página 1 + páginas seguintes, sem repetir id (a Unsplash às vezes
   // devolve a mesma foto em páginas diferentes; chave duplicada quebra o React).
@@ -584,18 +629,17 @@ export function SearchWorkspace({
   const loadMore = useCallback(async () => {
     if (status !== "success" || loadingMore || !hasMorePages) return;
     const term = debouncedQuery;
+    const key = searchKey;
     const page = nextPage;
     setMore((prev) => {
-      const base = prev.query === term ? prev : { ...NO_MORE_PAGES, query: term };
+      const base = prev.key === key ? prev : { ...NO_MORE_PAGES, key };
       return { ...base, loading: true, failed: false };
     });
     try {
-      const response = await fetch(
-        `/api/search?q=${encodeURIComponent(term)}&page=${page}`,
-      );
+      const response = await fetch(buildSearchUrl(term, page, sourcesParam));
       const body = (await response.json()) as SearchApiResponse;
       setMore((prev) => {
-        if (prev.query !== term) return prev; // usuário trocou a busca no meio
+        if (prev.key !== key) return prev; // usuário trocou a busca ou as fontes no meio
         if (!body.ok) return { ...prev, loading: false, failed: true };
         return {
           ...prev,
@@ -608,10 +652,10 @@ export function SearchWorkspace({
       });
     } catch {
       setMore((prev) =>
-        prev.query === term ? { ...prev, loading: false, failed: true } : prev,
+        prev.key === key ? { ...prev, loading: false, failed: true } : prev,
       );
     }
-  }, [status, loadingMore, hasMorePages, debouncedQuery, nextPage]);
+  }, [status, loadingMore, hasMorePages, debouncedQuery, nextPage, searchKey, sourcesParam]);
 
   useEffect(() => {
     return () => {
@@ -641,8 +685,37 @@ export function SearchWorkspace({
     writeDraft({ name: boardName, items: board });
   }, [board, boardName]);
 
-  // Busca real na Unsplash: dispara quando o termo (já com debounce) muda; aborta a
-  // requisição anterior se o usuário continuar digitando.
+  // Restaura as fontes escolhidas numa sessão anterior (uma vez, após a montagem —
+  // o HTML do servidor sempre traz todas; aplicar num microtask evita descasar com ele).
+  useEffect(() => {
+    let stored: ImageSource[] | null = null;
+    try {
+      const raw = window.localStorage.getItem(SOURCES_KEY);
+      if (raw) stored = parseSources(raw);
+    } catch {
+      // localStorage indisponível — segue com todas as fontes.
+    }
+    queueMicrotask(() => {
+      if (stored) setSources(stored);
+      sourcesHydrated.current = true;
+    });
+  }, []);
+
+  // Guarda a escolha de fontes a cada mudança (só depois da tentativa de restauração).
+  useEffect(() => {
+    if (!sourcesHydrated.current) return;
+    try {
+      window.localStorage.setItem(
+        SOURCES_KEY,
+        serializeSources(sources) ?? ALL_SOURCE_IDS.join(","),
+      );
+    } catch {
+      // Sem persistência nesta sessão — não é crítico.
+    }
+  }, [sources]);
+
+  // Busca agregada real: dispara quando o termo (já com debounce) ou o filtro de
+  // fontes muda; aborta a requisição anterior se o usuário continuar mexendo.
   useEffect(() => {
     if (!debouncedQuery) return;
 
@@ -650,19 +723,19 @@ export function SearchWorkspace({
 
     (async () => {
       try {
-        const response = await fetch(`/api/search?q=${encodeURIComponent(debouncedQuery)}`, {
+        const response = await fetch(buildSearchUrl(debouncedQuery, 1, sourcesParam), {
           signal: controller.signal,
         });
         const body = (await response.json()) as SearchApiResponse;
-        setOutcome({ query: debouncedQuery, kind: "response", body });
+        setOutcome({ key: searchKey, kind: "response", body });
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError") return;
-        setOutcome({ query: debouncedQuery, kind: "networkError" });
+        setOutcome({ key: searchKey, kind: "networkError" });
       }
     })();
 
     return () => controller.abort();
-  }, [debouncedQuery]);
+  }, [searchKey, debouncedQuery, sourcesParam]);
 
   function flashToast(message: string) {
     setToast(message);
@@ -1060,6 +1133,8 @@ export function SearchWorkspace({
           )}
 
           <SearchField value={query} onSearch={setQuery} />
+
+          <SearchSourceFilter selected={sources} onChange={setSources} />
 
           {!hasSearched && <SearchSuggestions onPick={setQuery} />}
         </div>

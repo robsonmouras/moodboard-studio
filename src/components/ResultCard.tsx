@@ -3,6 +3,7 @@
 import { Check, Heart } from "@phosphor-icons/react";
 import { css } from "styled-system/css";
 import { ImageTile } from "@/components/ImageTile";
+import { SOURCE_LABEL } from "@/lib/image-sources/catalog";
 import type { SearchImage } from "@/types";
 
 /**
@@ -30,11 +31,14 @@ const card = css({
   _hover: {
     "& img": { transform: "scale(1.045)" },
     "& [data-role='overlay']": { opacity: "1" },
+    "& [data-role='source']": { opacity: "0" },
   },
   _focusWithin: {
     "& [data-role='overlay']": { opacity: "1" },
+    "& [data-role='source']": { opacity: "0" },
   },
   "&[data-fav='true'] [data-role='overlay']": { opacity: "1" },
+  "&[data-fav='true'] [data-role='source']": { opacity: "0" },
 });
 
 // Selo permanente no canto: esta foto já está salva em algum board do usuário
@@ -127,11 +131,27 @@ const sourceTag = css({
   textShadow: "0 1px 2px token(colors.black.a7)",
 });
 
-const SOURCE_LABEL: Record<SearchImage["source"], string> = {
-  unsplash: "Unsplash",
-  pexels: "Pexels",
-  pixabay: "Pixabay",
-};
+// Selo permanente e discreto com a origem da foto (Unsplash/Pexels/Pixabay) — dá
+// sentido visual ao filtro de fontes. Some no hover/foco/favorito, quando o
+// crédito completo do overlay assume, e no mobile, onde o overlay já fica sempre visível.
+const sourceBadge = css({
+  position: "absolute",
+  bottom: "2",
+  left: "2",
+  px: "2",
+  py: "0.5",
+  rounded: "full",
+  bg: "black.a7",
+  color: "white",
+  fontFamily: "body",
+  fontSize: "10px",
+  fontWeight: "medium",
+  lineHeight: "1.4",
+  letterSpacing: "0.02em",
+  pointerEvents: "none",
+  opacity: { base: "0", md: "1" },
+  transition: "opacity 0.2s ease",
+});
 
 // Sem "botão" — o coração fica direto sobre o gradiente, na mesma linha do crédito,
 // como uma legenda só. Sombra dá leitura em qualquer foto (clara ou escura).
@@ -181,6 +201,10 @@ export function ResultCard({
   return (
     <figure className={card} data-fav={isFavorite}>
       <ImageTile image={image} />
+
+      <span className={sourceBadge} data-role="source" aria-hidden>
+        {SOURCE_LABEL[image.source]}
+      </span>
 
       {inBoardLabel && (
         <span className={inBoardBadge} title={inBoardTitle ?? inBoardLabel}>

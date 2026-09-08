@@ -7,7 +7,7 @@
  * ativas em paralelo e combina — a falha de uma não derruba a busca inteira.
  */
 
-import type { SearchImage } from "@/types";
+import type { ImageSource, SearchImage } from "@/types";
 
 /** Quantos resultados cada fonte devolve por página. */
 export const PER_PAGE = 24;
@@ -30,6 +30,8 @@ export type SourceOutcome =
   | { ok: false; error: "rate_limit" | "source_error" };
 
 export interface ImageSourceAdapter {
+  /** Id canônico da fonte — casa com `SearchImage.source` e com o filtro da busca. */
+  readonly id: ImageSource;
   /** Rótulo curto pra logs e diagnóstico. */
   readonly label: string;
   /** `true` quando a chave de ambiente da fonte está presente. Fonte sem chave é pulada. */
