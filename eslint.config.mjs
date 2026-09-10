@@ -19,6 +19,8 @@ const eslintConfig = defineConfig([
     "styled-system/**",
     // Build estático do Storybook (`npm run build-storybook`) — não versionado.
     "storybook-static/**",
+    // Service worker do MSW gerado por `npx msw init public` — arquivo de vendor.
+    "public/mockServiceWorker.js",
   ]),
   ...storybook.configs["flat/recommended"],
 ]);
