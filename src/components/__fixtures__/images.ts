@@ -1,4 +1,4 @@
-import type { SearchImage } from "@/types";
+import type { BoardItem, SearchImage } from "@/types";
 
 /**
  * Fotos de exemplo para as stories (busca / board). URLs reais da Unsplash — o
@@ -45,3 +45,25 @@ export const sampleSearchImages: SearchImage[] = [
 ];
 
 export const sampleSearchImage = sampleSearchImages[0];
+
+/**
+ * Os mesmos exemplos na forma `BoardItem` (favoritado, ainda em memória) — pro
+ * `BoardPanel` e outras stories do board em construção.
+ */
+export const sampleBoardItems: BoardItem[] = sampleSearchImages.map((image) => ({
+  id: image.id,
+  unsplashId: image.id,
+  description: image.description,
+  author: image.author,
+  imageUrl: image.imageUrl,
+  thumbUrl: image.thumbUrl,
+  aspectRatio: image.aspectRatio,
+  width: image.width,
+  height: image.height,
+}));
+
+/** Miniaturas para a capa de um board (`BoardCover`, `BoardCard`). */
+export const sampleCover = sampleSearchImages.map((image) => ({
+  thumbUrl: image.thumbUrl,
+  description: image.description,
+}));
