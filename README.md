@@ -109,12 +109,34 @@ cp .env.local.example .env.local   # e preencha os valores
 npm run dev                        # http://localhost:3000
 ```
 
-Outros scripts: `npm run build`, `npm run lint`, `npm run start`.
+Outros scripts: `npm run build`, `npm run lint`, `npm run start`,
+`npm run storybook`, `npm run build-storybook`.
 O script `prepare` roda `panda codegen` automaticamente depois de `npm install`
 (gera a pasta `styled-system/`). Para rodar na mão: `npx panda codegen`.
 
-> Ao instalar, o npm pode avisar sobre `install scripts not covered` (esbuild, unrs-resolver).
-> São otimizações opcionais de binário nativo; o projeto builda e linta normalmente sem elas.
+> O `package.json` declara `allowScripts` (recurso do npm 11) liberando os `install scripts`
+> de `esbuild` e `unrs-resolver` — o `esbuild` é binário nativo e é obrigatório para o
+> builder Vite do Storybook. Se aparecer `install scripts not yet covered` para outro
+> pacote novo, revise com `npm approve-scripts <pkg>`.
+
+## Storybook
+
+```bash
+npm run storybook          # http://localhost:6006
+npm run build-storybook    # build estático em storybook-static/ (não versionado)
+```
+
+- **Storybook 10** com o framework `@storybook/nextjs-vite` (builder Vite) — o pipeline do
+  Panda é PostCSS puro (`postcss.config.cjs`, carregado pelo Vite da raiz) e casa direto.
+- Config em `.storybook/`: `main.ts` (stories + aliases via `resolve.tsconfigPaths`),
+  `preview.ts` (importa `src/app/globals.css` — a entry do Panda — e aplica as CSS vars
+  das fontes), `fonts.ts` (replica o `next/font` do `layout.tsx`, que o Storybook não roda).
+- Stories co-locadas ao lado do componente (`src/components/**/*.stories.tsx`), títulos
+  espelhando a área: `UI/*`, `Busca/*`, `Marca/*`. Fixtures em `src/components/__fixtures__/`.
+- Pilotos nesta primeira leva: `UI/Button`, `Busca/ResultCard`, `Marca/BrandHeadline`.
+  Componentes acoplados a roteamento / Server Actions (`BoardCard`, `SearchWorkspace`,
+  `LoginForm`, `BoardDetailView`) ainda precisam de uma view apresentacional extraída —
+  ver a issue de setup.
 
 ## Variáveis de ambiente
 
